@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SupportBase — Central de Conhecimento</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+</head>
+<body>
+
+<!-- ═══════════ TELA DE LOGIN ═══════════ -->
+<div id="login-screen" class="login-screen">
+  <div class="login-card">
+    <div class="login-brand">
+      <span class="brand-icon">⚡</span>
+      <span class="brand-name">SupportBase</span>
+    </div>
+    <p class="login-subtitle">Central de Conhecimento — acesso restrito</p>
+
+    <form id="login-form" autocomplete="off">
+      <div class="form-group">
+        <label>Usuário</label>
+        <input type="text" id="login-user" placeholder="Digite seu usuário" autocomplete="username" />
+      </div>
+      <div class="form-group">
+        <label>Senha</label>
+        <div class="login-pass-wrap">
+          <input type="password" id="login-pass" placeholder="Digite sua senha" autocomplete="current-password" />
+          <button type="button" class="login-toggle-pass" id="login-toggle-pass" title="Mostrar/ocultar senha">👁</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="login-remember">
+          <input type="checkbox" id="login-remember" />
+          Manter conectado neste dispositivo
+        </label>
+      </div>
+      <p class="login-error" id="login-error" style="display:none">Usuário ou senha inválidos.</p>
+      <button type="submit" class="btn-primary login-submit" id="login-submit">Entrar</button>
+    </form>
+  </div>
+</div>
+
+<div id="app" style="display:none">
+
+  <!-- ═══════════ HEADER ═══════════ -->
+  <header class="header">
+    <div class="header-brand">
+      <span class="brand-icon">⚡</span>
+      <span class="brand-name">SupportBase</span>
+    </div>
+    <nav class="header-actions">
+      <button class="btn-ghost" id="btn-open-register"><span class="icon">＋</span> Cadastrar</button>
+      <button class="btn-ghost" id="btn-open-list" title="Lista completa"><span class="icon">☰</span> Lista</button>
+      <button class="btn-ghost btn-reminders" id="btn-open-reminders" title="Lembretes">
+        🔔 Lembretes<span class="badge-count" id="reminder-badge" style="display:none"></span>
+      </button>
+      <button class="btn-ghost btn-chamados" id="btn-open-chamados" title="Chamados">📋 Chamados<span class="badge-count" id="chamados-badge" style="display:none"></span></button>
+      <button class="btn-ghost" id="btn-backup"><span class="icon">⬇</span> Backup</button>
+      <button class="btn-ghost" id="btn-restore-trigger"><span class="icon">⬆</span> Restaurar</button>
+      <input type="file" id="input-restore" accept=".json" style="display:none" />
+      <span class="header-divider"></span>
+      <span class="logged-user" id="logged-user-label">👤 Marcos</span>
+      <button class="btn-ghost btn-logout" id="btn-logout" title="Sair"><span class="icon">⏻</span> Sair</button>
+    </nav>
+  </header>
+
+  <!-- ═══════════ HERO / BUSCA ═══════════ -->
+  <section class="hero">
+    <p class="hero-eyebrow">Central de Conhecimento</p>
+    <h1 class="hero-title">O que você precisa agora?</h1>
+    <div class="search-tabs">
+      <button class="tab-btn active" data-type="textos"><span>📝</span> Textos</button>
+      <button class="tab-btn" data-type="tutoriais"><span>📘</span> Tutoriais</button>
+      <button class="tab-btn" data-type="todos"><span>🔍</span> Todos</button>
+    </div>
+    <div class="search-wrapper">
+      <span class="search-icon">🔎</span>
+      <input type="text" id="search-input" class="search-input" placeholder="Digite palavra-chave ou tag… (Ctrl+K)" autocomplete="off" />
+      <button class="search-clear" id="search-clear" title="Limpar">✕</button>
+    </div>
+    <div class="category-filter" id="category-filter">
+      <span class="filter-label">Categoria:</span>
+      <div id="category-chips" class="chips-row"></div>
+    </div>
+  </section>
+
+  <!-- ═══════════ MAIN ═══════════ -->
+  <main class="main-content">
+    <section class="panel" id="panel-history">
+      <div class="panel-header">
+        <span class="panel-title">🕐 Acessados Recentemente</span>
+        <button class="btn-tiny" id="btn-clear-history">Limpar</button>
+      </div>
+      <div class="history-list" id="history-list"></div>
+    </section>
+    <section class="panel" id="panel-favorites">
+      <div class="panel-header"><span class="panel-title">⭐ Favoritos</span></div>
+      <div class="favorites-list" id="favorites-list"></div>
+    </section>
+    <section class="results-section" id="results-section" style="display:none">
+      <div class="results-header">
+        <span id="results-count" class="results-count"></span>
+        <button class="btn-ghost btn-sm" id="btn-back">↺ Voltar ao início</button>
+      </div>
+      <div id="results-list" class="results-list"></div>
+    </section>
+  </main>
+</div>
+
+<!-- ═══════════ MODAL CADASTRO (Texto + Tutorial) ═══════════ -->
+<div class="modal-overlay" id="modal-register" style="display:none">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 class="modal-title" id="modal-title-text">Novo Cadastro</h2>
+      <button class="modal-close" id="modal-close">✕</button>
+    </div>
+    <div class="modal-tabs">
+      <button class="modal-tab active" data-tab="texto">📝 Texto</button>
+      <button class="modal-tab" data-tab="tutorial">📘 Tutorial</button>
+    </div>
+    <!-- FORM TEXTO -->
+    <div class="modal-form" id="form-texto">
+      <input type="hidden" id="edit-id-texto" />
+      <div class="form-group">
+        <label>Palavra-chave *</label>
+        <input type="text" id="texto-keyword" placeholder="ex: vpn, senha, impressora…" />
+        <div class="tags-preview" id="texto-tags-preview"></div>
+        <small>Separe múltiplas tags com vírgula</small>
+      </div>
+      <div class="form-group">
+        <label>Categoria</label>
+        <input type="text" id="texto-category" list="category-suggestions" placeholder="ex: VPN, SAP, Impressora…" />
+        <datalist id="category-suggestions"></datalist>
+      </div>
+      <div class="form-group">
+        <label>Descrição (texto a ser copiado) *</label>
+        <textarea id="texto-desc" rows="5" placeholder="Use {nome}, {chamado} para placeholders. {hoje}, {hora}, {amanha}, {pdata}, {datahoracompleta} são automáticos."></textarea>
+      </div>
+      <div class="form-actions">
+        <button class="btn-secondary" id="btn-cancel-texto">Cancelar</button>
+        <button class="btn-primary" id="btn-save-texto">Salvar Texto</button>
+      </div>
+    </div>
+    <!-- FORM TUTORIAL -->
+    <div class="modal-form" id="form-tutorial" style="display:none">
+      <input type="hidden" id="edit-id-tutorial" />
+      <div class="form-group">
+        <label>Palavra-chave *</label>
+        <input type="text" id="tutorial-keyword" placeholder="ex: instalar vpn, configurar email…" />
+        <div class="tags-preview" id="tutorial-tags-preview"></div>
+        <small>Separe múltiplas tags com vírgula</small>
+      </div>
+      <div class="form-group">
+        <label>Categoria</label>
+        <input type="text" id="tutorial-category" list="category-suggestions" placeholder="ex: VPN, SAP, Impressora…" />
+      </div>
+      <div class="form-group">
+        <label>Tipo de tutorial</label>
+        <select id="tutorial-type">
+          <option value="doc">📄 Documento / Passo a passo</option>
+          <option value="link">🌐 Link externo</option>
+          <option value="video">🎥 Vídeo</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Título *</label>
+        <input type="text" id="tutorial-title" placeholder="Título do tutorial" />
+      </div>
+      <div class="form-group" id="group-tutorial-url">
+        <label>URL (se link externo ou vídeo)</label>
+        <input type="url" id="tutorial-url" placeholder="https://…" />
+      </div>
+      <div class="form-group">
+        <label>Descrição / Resumo</label>
+        <textarea id="tutorial-desc" rows="3" placeholder="Breve descrição do que este tutorial resolve…"></textarea>
+      </div>
+      <div class="form-group" id="group-tutorial-content">
+        <label>Conteúdo do tutorial</label>
+        <div class="editor-toolbar">
+          <button type="button" class="toolbar-btn" data-cmd="bold"><b>B</b></button>
+          <button type="button" class="toolbar-btn" data-cmd="italic"><i>I</i></button>
+          <button type="button" class="toolbar-btn" data-cmd="insertUnorderedList">☰</button>
+          <button type="button" class="toolbar-btn" data-cmd="insertOrderedList">⒈</button>
+          <button type="button" class="toolbar-btn" data-cmd="createLink">🔗</button>
+          <button type="button" class="toolbar-btn" id="btn-insert-image">🖼</button>
+          <span class="toolbar-sep"></span>
+          <small class="toolbar-hint">Cole imagens com Ctrl+V</small>
+        </div>
+        <div id="tutorial-content" class="rich-editor" contenteditable="true" data-placeholder="Escreva o conteúdo aqui. Cole imagens com Ctrl+V…"></div>
+      </div>
+      <div class="form-actions">
+        <button class="btn-secondary" id="btn-cancel-tutorial">Cancelar</button>
+        <button class="btn-primary" id="btn-save-tutorial">Salvar Tutorial</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ MODAL VISUALIZAR TUTORIAL ═══════════ -->
+<div class="modal-overlay" id="modal-view-tutorial" style="display:none">
+  <div class="modal modal-large">
+    <div class="modal-header">
+      <h2 class="modal-title" id="view-tutorial-title">Tutorial</h2>
+      <button class="modal-close" id="modal-view-close">✕</button>
+    </div>
+    <div class="tutorial-meta" id="view-tutorial-meta"></div>
+    <div class="tutorial-body" id="view-tutorial-body"></div>
+    <div class="modal-footer">
+      <button class="btn-secondary" id="btn-close-tutorial-view">Fechar</button>
+      <button class="btn-primary" id="btn-open-new-tab">🌐 Abrir em nova aba</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ MODAL PLACEHOLDERS ═══════════ -->
+<div class="modal-overlay" id="modal-placeholders" style="display:none">
+  <div class="modal modal-ph">
+    <div class="modal-header">
+      <div>
+        <h2 class="modal-title">Preencher campos</h2>
+        <p class="modal-subtitle" id="ph-keyword-label"></p>
+      </div>
+      <button class="modal-close" id="ph-close">✕</button>
+    </div>
+    <div class="ph-preview-wrap">
+      <div class="ph-preview-label">
+        Prévia
+        <span class="ph-legend">
+          <span class="ph-leg-item ph-auto-leg">⚡ automático</span>
+          <span class="ph-leg-item ph-filled-leg">✔ preenchido</span>
+          <span class="ph-leg-item ph-pending-leg">○ pendente</span>
+        </span>
+      </div>
+      <div class="ph-preview" id="ph-preview"></div>
+    </div>
+    <div class="ph-fields" id="ph-fields"></div>
+    <div class="modal-footer">
+      <button class="btn-secondary" id="ph-cancel">Cancelar</button>
+      <button class="btn-primary" id="ph-confirm">📋 Copiar texto</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ MODAL LEMBRETES ═══════════ -->
+<div class="modal-overlay" id="modal-reminders" style="display:none">
+  <div class="modal modal-large">
+    <div class="modal-header">
+      <h2 class="modal-title">🔔 Lembretes</h2>
+      <button class="modal-close" id="rem-modal-close">✕</button>
+    </div>
+    <div class="reminder-panel">
+      <!-- FORM NOVO/EDITAR -->
+      <div class="rem-form-wrap" id="rem-form-wrap">
+        <div class="rem-form-title" id="rem-form-title">Novo lembrete</div>
+        <input type="hidden" id="rem-edit-id" />
+        <div class="rem-form-grid">
+          <div class="form-group" style="grid-column:1/-1">
+            <label>Título *</label>
+            <input type="text" id="rem-title" placeholder="Ex: Ligar para o cliente, Reunião às 15h…" />
+          </div>
+          <div class="form-group" style="grid-column:1/-1">
+            <label>Descrição</label>
+            <textarea id="rem-desc" rows="2" placeholder="Detalhes opcionais…"></textarea>
+          </div>
+          <div class="form-group">
+            <label>Data *</label>
+            <input type="date" id="rem-date" />
+          </div>
+          <div class="form-group">
+            <label>Hora *</label>
+            <input type="time" id="rem-time" />
+          </div>
+          <div class="form-group">
+            <label>Prioridade</label>
+            <select id="rem-priority">
+              <option value="baixa">🟢 Baixa</option>
+              <option value="media" selected>🟡 Média</option>
+              <option value="alta">🟠 Alta</option>
+              <option value="urgente">🔴 Urgente</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Recorrência</label>
+            <select id="rem-recurrence">
+              <option value="none">Única vez</option>
+              <option value="daily">Diária</option>
+              <option value="weekly">Semanal</option>
+              <option value="workdays">Dias úteis</option>
+            </select>
+          </div>
+          <div class="form-group" style="grid-column:1/-1">
+            <label>
+              <input type="checkbox" id="rem-alarm" checked />
+              Ativar alarme sonoro e notificação
+            </label>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn-secondary" id="rem-cancel">Cancelar</button>
+          <button class="btn-primary" id="rem-save">Salvar Lembrete</button>
+        </div>
+      </div>
+      <!-- LISTA DE LEMBRETES -->
+      <div class="rem-list-wrap">
+        <div class="rem-list-header">
+          <span class="panel-title">Lembretes cadastrados</span>
+          <div class="rem-filter-row">
+            <button class="chip active" data-rem-filter="all">Todos</button>
+            <button class="chip" data-rem-filter="pending">Pendentes</button>
+            <button class="chip" data-rem-filter="done">Concluídos</button>
+          </div>
+        </div>
+        <div id="rem-list" class="rem-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ MODAL CHAMADOS ═══════════ -->
+<div class="modal-overlay" id="modal-chamados" style="display:none">
+  <div class="modal modal-large">
+    <div class="modal-header">
+      <h2 class="modal-title">📋 Chamados</h2>
+      <button class="modal-close" id="cham-modal-close">✕</button>
+    </div>
+    <div class="chamados-panel">
+      <!-- FORM NOVO -->
+      <div class="cham-form-wrap" id="cham-form-wrap">
+        <div class="rem-form-title" id="cham-form-title">Novo chamado</div>
+        <input type="hidden" id="cham-edit-id" />
+        <div class="rem-form-grid">
+          <div class="form-group">
+            <label>Nome *</label>
+            <input type="text" id="cham-nome" placeholder="Nome do solicitante" />
+          </div>
+          <div class="form-group">
+            <label>Matrícula *</label>
+            <input type="text" id="cham-matricula" placeholder="Ex: 123456" />
+          </div>
+          <div class="form-group">
+            <label>Status</label>
+            <select id="cham-status">
+              <option value="aberto">🔵 Aberto</option>
+              <option value="andamento">🟡 Em andamento</option>
+              <option value="resolvido">🟢 Resolvido</option>
+              <option value="cancelado">⚫ Cancelado</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Prioridade</label>
+            <select id="cham-priority">
+              <option value="baixa">🟢 Baixa</option>
+              <option value="media" selected>🟡 Média</option>
+              <option value="alta">🟠 Alta</option>
+              <option value="urgente">🔴 Urgente</option>
+            </select>
+          </div>
+          <div class="form-group" style="grid-column:1/-1">
+            <label>Descrição do problema *</label>
+            <textarea id="cham-desc" rows="3" placeholder="Descreva o problema relatado pelo usuário…"></textarea>
+          </div>
+          <div class="form-group" style="grid-column:1/-1">
+            <label>Solução / Observações</label>
+            <textarea id="cham-solucao" rows="2" placeholder="Registre a solução aplicada ou observações relevantes…"></textarea>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn-secondary" id="cham-cancel">Cancelar</button>
+          <button class="btn-primary" id="cham-save">Salvar Chamado</button>
+        </div>
+      </div>
+      <!-- BARRA PESQUISA + FILTROS CHAMADOS -->
+      <div class="cham-list-wrap">
+        <div class="cham-list-header">
+          <span class="panel-title">Chamados registrados</span>
+          <div class="cham-controls">
+            <input type="text" id="cham-search" class="cham-search-input" placeholder="Buscar por nome ou matrícula…" />
+            <div class="rem-filter-row">
+              <button class="chip active" data-cham-filter="all">Todos</button>
+              <button class="chip" data-cham-filter="aberto">Abertos</button>
+              <button class="chip" data-cham-filter="andamento">Em andamento</button>
+              <button class="chip" data-cham-filter="resolvido">Resolvidos</button>
+            </div>
+          </div>
+        </div>
+        <div id="cham-list" class="cham-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ MODAL LISTA COMPLETA ═══════════ -->
+<div class="modal-overlay" id="modal-list" style="display:none">
+  <div class="modal modal-fullscreen">
+    <div class="modal-header">
+      <h2 class="modal-title">☰ Lista Completa</h2>
+      <button class="modal-close" id="list-modal-close">✕</button>
+    </div>
+    <div class="list-panel">
+      <div class="list-toolbar">
+        <div class="list-tabs">
+          <button class="list-tab active" data-list-tab="textos">📝 Textos <span class="list-tab-count" id="lt-count-textos"></span></button>
+          <button class="list-tab" data-list-tab="tutoriais">📘 Tutoriais <span class="list-tab-count" id="lt-count-tutoriais"></span></button>
+          <button class="list-tab" data-list-tab="lembretes">🔔 Lembretes <span class="list-tab-count" id="lt-count-lembretes"></span></button>
+          <button class="list-tab" data-list-tab="chamados">📋 Chamados <span class="list-tab-count" id="lt-count-chamados"></span></button>
+        </div>
+        <input type="text" id="list-search" class="list-search-input" placeholder="Filtrar itens…" />
+      </div>
+      <div id="list-content" class="list-content"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ MODAL ALARME ═══════════ -->
+<div class="modal-overlay" id="modal-alarm" style="display:none">
+  <div class="modal modal-alarm">
+    <div class="alarm-pulse">🔔</div>
+    <h2 class="alarm-title" id="alarm-title"></h2>
+    <p class="alarm-desc" id="alarm-desc"></p>
+    <div class="alarm-meta" id="alarm-meta"></div>
+    <div class="form-actions" style="justify-content:center;padding-top:0">
+      <button class="btn-secondary" id="alarm-snooze">⏰ Soneca (5 min)</button>
+      <button class="btn-primary" id="alarm-dismiss">✓ Dispensar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ TOAST ═══════════ -->
+<div class="toast" id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

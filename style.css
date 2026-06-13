@@ -620,16 +620,164 @@ mark { background: rgba(56,189,248,0.25); color: var(--cyan); border-radius: 2px
 .toast.error   { border-color: var(--red);    color: var(--red); }
 
 /* ═══════════════════════════════════════════════
-   RESPONSIVO
+   TOUCH DEVICES — ações sempre visíveis
+   (hover não existe no toque, então não pode
+   depender de :hover para revelar botões/dicas)
+   ═══════════════════════════════════════════════ */
+@media (hover: none) {
+  .card-actions { opacity: 1; }
+  .copy-hint { opacity: 1; }
+}
+
+/* ═══════════════════════════════════════════════
+   RESPONSIVO — TABLET (≤900px)
+   ═══════════════════════════════════════════════ */
+@media (max-width: 900px) {
+  .reminder-panel, .chamados-panel { grid-template-columns: 1fr; }
+  .rem-form-wrap, .cham-form-wrap {
+    border-right: none; border-bottom: 1px solid var(--border);
+    border-radius: 0;
+  }
+  .rem-list-wrap, .cham-list-wrap { padding: 16px 20px; }
+  .rem-list, .cham-list { max-height: none; }
+}
+
+/* ═══════════════════════════════════════════════
+   RESPONSIVO — MOBILE (≤700px)
    ═══════════════════════════════════════════════ */
 @media (max-width: 700px) {
-  .header { padding: 0 1rem; }
+  html { font-size: 15px; }
+
+  /* ── HEADER ── */
+  .header {
+    padding: 0 12px;
+    height: 52px;
+    gap: 6px;
+  }
+  .header-brand .brand-name { font-size: 14px; }
+  .header-brand .brand-icon { font-size: 16px; }
+  .header-actions {
+    flex: 1;
+    justify-content: flex-end;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    flex-wrap: nowrap;
+    padding-bottom: 2px;
+  }
+  .header-actions::-webkit-scrollbar { display: none; }
+  .header-actions .btn-ghost { flex-shrink: 0; padding: 7px 10px; }
   .header-actions .btn-ghost span:not(.icon) { display: none; }
-  .hero { padding: 28px 1rem 20px; }
-  .main-content { padding: 0 1rem 3rem; }
-  .reminder-panel, .chamados-panel { grid-template-columns: 1fr; }
-  .rem-form-wrap, .cham-form-wrap { border-right: none; border-bottom: 1px solid var(--border); }
-  .list-toolbar { flex-direction: column; align-items: flex-start; }
+  .header-actions .btn-ghost .icon { font-size: 16px; }
+  .header-divider, .logged-user { display: none; }
+  .btn-logout { order: 99; }
+
+  /* ── HERO / BUSCA ── */
+  .hero { padding: 24px 14px 18px; }
+  .hero-eyebrow { font-size: 10px; letter-spacing: 2px; }
+  .hero-title { font-size: 22px; margin-bottom: 20px; }
+  .search-tabs { width: 100%; justify-content: center; }
+  .tab-btn { padding: 7px 14px; font-size: 12.5px; flex: 1; justify-content: center; }
+  .search-input { padding: 14px 44px 14px 44px; font-size: 15px; }
+  .search-icon { left: 14px; font-size: 16px; }
+  .search-clear { right: 10px; }
+
+  /* ── MAIN / CARDS ── */
+  .main-content { padding: 0 12px 3rem; }
+  .panel { padding: 14px 16px; }
+  .results-header { flex-wrap: wrap; gap: 8px; }
+  .result-card { padding: 14px; }
+  .card-top { flex-direction: column; gap: 8px; }
+  .card-actions { width: 100%; justify-content: flex-end; flex-wrap: wrap; }
+  .action-btn { padding: 5px 10px; font-size: 13px; }
+  .card-keyword { font-size: 14px; }
+  .card-desc { font-size: 13px; -webkit-line-clamp: 3; }
+  .copy-hint { font-size: 11px; }
+  .history-chip, .fav-chip { max-width: 160px; font-size: 12px; }
+
+  /* ── MODAIS — base ── */
+  .modal-overlay { padding: 0; align-items: flex-end; }
+  .modal {
+    max-width: 100%; width: 100%;
+    max-height: 94vh;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    animation: slide-up-mobile 0.22s ease;
+  }
+  .modal-large, .modal-fullscreen, .modal-ph, .modal-alarm { max-width: 100%; }
+  .modal-fullscreen { max-height: 96vh; }
+  @keyframes slide-up-mobile {
+    from { transform: translateY(40px); opacity: 0; }
+    to   { transform: translateY(0);    opacity: 1; }
+  }
+  .modal-header { padding: 16px 16px 12px; }
+  .modal-title { font-size: 16px; }
+  .modal-form { padding: 16px; }
+  .modal-footer { padding: 12px 16px; flex-wrap: wrap; }
+  .modal-footer .btn-primary, .modal-footer .btn-secondary { flex: 1; text-align: center; }
+
+  /* ── FORM GRIDS ── */
+  .rem-form-grid { grid-template-columns: 1fr; }
+  .form-group { margin-bottom: 14px; }
+
+  /* ── LEMBRETES / CHAMADOS ── */
+  .rem-form-wrap, .cham-form-wrap { padding: 16px; }
+  .rem-list-wrap, .cham-list-wrap { padding: 16px; }
+  .rem-card, .cham-card { padding: 12px; }
+  .rem-card-top, .cham-card-top { flex-wrap: wrap; }
+  .rem-card-meta, .cham-card-meta { gap: 6px; }
+  .rem-meta-pill { font-size: 10.5px; }
+  .cham-controls { gap: 8px; }
+  .rem-filter-row, .cham-controls .rem-filter-row { flex-wrap: wrap; }
+
+  /* ── EDITOR / TUTORIAL ── */
+  .editor-toolbar { gap: 2px; padding: 5px 6px; }
+  .toolbar-btn { padding: 5px 7px; font-size: 13px; }
+  .toolbar-hint { display: none; }
+  .rich-editor { min-height: 140px; font-size: 13.5px; }
+  .tutorial-meta, .tutorial-body { padding: 14px 16px; }
+
+  /* ── PLACEHOLDERS ── */
+  .ph-preview-wrap { margin: 0 16px 4px; }
+  .ph-fields { padding: 12px 16px 4px; max-height: 50vh; }
+  .ph-legend { width: 100%; justify-content: flex-start; }
+  .ph-auto-item { font-size: 12px; }
+
+  /* ── LISTA COMPLETA ── */
+  .list-panel { height: calc(96vh - 64px); }
+  .list-toolbar { flex-direction: column; align-items: stretch; padding: 12px 16px; gap: 10px; }
+  .list-tabs { flex-wrap: wrap; gap: 4px; }
+  .list-tab { font-size: 12px; padding: 6px 10px; flex: 1; justify-content: center; }
   .list-search-input { width: 100%; }
-  .list-tabs { flex-wrap: wrap; }
+  .list-content { padding: 10px 12px; overflow-x: auto; }
+  .list-table { min-width: 560px; font-size: 12.5px; }
+  .list-table th, .list-table td { padding: 8px; }
+
+  /* ── LOGIN ── */
+  .login-card { padding: 28px 22px; border-radius: var(--radius-md); }
+  .login-brand { font-size: 19px; }
+
+  /* ── TOAST ── */
+  .toast {
+    left: 12px; right: 12px; transform: translateY(20px);
+    bottom: 16px; white-space: normal; text-align: center;
+    max-width: none;
+  }
+  .toast.show { transform: translateY(0); }
+
+  /* ── ALARME ── */
+  .modal-alarm { padding: 28px 20px; border-radius: var(--radius-lg); }
+  .modal-alarm .form-actions { flex-direction: column; }
+  .modal-alarm .form-actions button { width: 100%; }
+}
+
+/* ═══════════════════════════════════════════════
+   RESPONSIVO — TELAS MUITO PEQUENAS (≤380px)
+   ═══════════════════════════════════════════════ */
+@media (max-width: 380px) {
+  .hero-title { font-size: 19px; }
+  .search-tabs { padding: 4px; }
+  .tab-btn span { display: none; }
+  .tab-btn { padding: 8px; }
+  .badge { font-size: 10px; padding: 2px 6px; }
+  .card-badges { gap: 4px; }
 }

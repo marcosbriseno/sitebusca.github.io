@@ -21,8 +21,8 @@
 
     <form id="login-form" autocomplete="off">
       <div class="form-group">
-        <label>Usuário</label>
-        <input type="text" id="login-user" placeholder="Digite seu usuário" autocomplete="username" />
+        <label>E-mail</label>
+        <input type="email" id="login-user" placeholder="seuemail@exemplo.com" autocomplete="username" />
       </div>
       <div class="form-group">
         <label>Senha</label>
@@ -37,10 +37,15 @@
           Manter conectado neste dispositivo
         </label>
       </div>
-      <p class="login-error" id="login-error" style="display:none">Usuário ou senha inválidos.</p>
+      <p class="login-error" id="login-error" style="display:none"></p>
       <button type="submit" class="btn-primary login-submit" id="login-submit">Entrar</button>
     </form>
   </div>
+</div>
+
+<div id="loading-overlay" class="loading-overlay" style="display:none">
+  <div class="loading-spinner"></div>
+  <p>Sincronizando seus dados…</p>
 </div>
 
 <div id="app" style="display:none">
@@ -62,7 +67,8 @@
       <button class="btn-ghost" id="btn-restore-trigger"><span class="icon">⬆</span> Restaurar</button>
       <input type="file" id="input-restore" accept=".json" style="display:none" />
       <span class="header-divider"></span>
-      <span class="logged-user" id="logged-user-label">👤 Marcos</span>
+      <span class="logged-user" id="logged-user-label">👤 …</span>
+      <span class="sync-status" id="sync-status" title="Status de sincronização">☁️</span>
       <button class="btn-ghost btn-logout" id="btn-logout" title="Sair"><span class="icon">⏻</span> Sair</button>
     </nav>
   </header>
@@ -431,6 +437,11 @@
 <!-- ═══════════ TOAST ═══════════ -->
 <div class="toast" id="toast"></div>
 
+<!-- ═══════════ FIREBASE SDK ═══════════ -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

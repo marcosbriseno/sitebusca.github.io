@@ -4,16 +4,6 @@
    ═══════════════════════════════════════════════ */
 "use strict";
 
-/* ═══════════ STORAGE KEYS ═══════════ */
-const DB_KEY   = 'supportbase_db';
-const HIST_KEY = 'supportbase_history';
-const FAV_KEY  = 'supportbase_favs';
-const AUTH_KEY = 'supportbase_auth';
-
-/* ═══════════ CREDENCIAIS ═══════════ */
-const AUTH_USER = 'Marcos';
-const AUTH_PASS = 'mbeocmfdm83';
-
 /* ═══════════ ESTADO GLOBAL ═══════════ */
 let state = { textos: [], tutoriais: [], lembretes: [], chamados: [] };
 let history   = [];
@@ -27,31 +17,53 @@ let activeListTab   = 'textos';
 let activeRemFilter = 'all';
 let activeChamFilter = 'all';
 
+/* ═══════════ FIREBASE ═══════════ */
+let auth = null;
+let db   = null;
+let currentUser = null;
+let unsubscribeSnapshot = null;
+let saveDebounceTimer = null;
+let _lastSyncedJSON = null;   // evita re-render ao receber eco do próprio save
+let _firstSnapshotLoaded = false;
+
 /* ═══════════════════════════════════════════════
    INIT
    ═══════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', () => {
+  try {
+    firebase.initializeApp(FIREBASE_CONFIG);
+    auth = firebase.auth();
+    db   = firebase.firestore();
+    db.enablePersistence({ synchronizeTabs: true }).catch(()=>{});
+  } catch (e) {
+    console.error('Erro ao iniciar Firebase. Verifique firebase-config.js', e);
+    toast('⚠️ Erro ao conectar com o Firebase. Veja firebase-config.js', 'error');
+  }
+
   bindLoginEvents();
 
-  if (isAuthenticated()) {
-    showApp();
-  } else {
-    showLogin();
-  }
+  auth.onAuthStateChanged(user => {
+    if (user) {
+      currentUser = user;
+      qs('#logged-user-label').textContent = `👤 ${user.email}`;
+      attachFirestoreListener(user.uid);
+      showApp();
+    } else {
+      currentUser = null;
+      detachFirestoreListener();
+      _firstSnapshotLoaded = false;
+      alarmTimers.forEach(clearTimeout);
+      alarmTimers = [];
+      showLogin();
+    }
+  });
 });
 
 /* ═══════════════════════════════════════════════
-   AUTENTICAÇÃO
+   AUTENTICAÇÃO (Firebase Auth — e-mail/senha)
    ═══════════════════════════════════════════════ */
-function isAuthenticated() {
-  // sessão da aba atual
-  if (sessionStorage.getItem(AUTH_KEY) === '1') return true;
-  // "manter conectado" persiste entre sessões
-  if (localStorage.getItem(AUTH_KEY) === '1') return true;
-  return false;
-}
-
 function showLogin() {
+  hide(qs('#loading-overlay'));
   show(qs('#login-screen'));
   hide(qs('#app'));
   setTimeout(() => qs('#login-user').focus(), 80);
@@ -61,34 +73,15 @@ let _appInitialized = false;
 
 function showApp() {
   hide(qs('#login-screen'));
-  show(qs('#app'));
+  show(qs('#loading-overlay'));
+  hide(qs('#app'));
   if (!_appInitialized) {
-    initApp();
-    _appInitialized = true;
-  } else {
-    // re-login: apenas atualiza dados e telas
-    loadDB();
-    renderHistory();
-    renderFavorites();
-    renderCategoryChips();
+    bindEvents();
     focusSearch();
-    scheduleAllAlarms();
-    updateBadges();
-    updateListCounts();
+    requestNotificationPermission();
+    _appInitialized = true;
   }
-}
-
-function initApp() {
-  loadDB();
-  renderHistory();
-  renderFavorites();
-  renderCategoryChips();
-  bindEvents();
-  focusSearch();
-  scheduleAllAlarms();
-  updateBadges();
-  updateListCounts();
-  requestNotificationPermission();
+  // a tela do app some quando o primeiro snapshot do Firestore chegar
 }
 
 function bindLoginEvents() {
@@ -98,6 +91,7 @@ function bindLoginEvents() {
   const toggle = qs('#login-toggle-pass');
   const errorEl = qs('#login-error');
   const card    = qs('.login-card');
+  const submitBtn = qs('#login-submit');
 
   toggle.addEventListener('click', () => {
     const isPass = passIn.type === 'password';
@@ -107,61 +101,165 @@ function bindLoginEvents() {
 
   form.addEventListener('submit', e => {
     e.preventDefault();
-    const user = userIn.value.trim();
-    const pass = passIn.value;
+    const email = userIn.value.trim();
+    const pass  = passIn.value;
+    if (!email || !pass) return;
 
-    if (user === AUTH_USER && pass === AUTH_PASS) {
-      errorEl.style.display = 'none';
-      const remember = qs('#login-remember').checked;
-      sessionStorage.setItem(AUTH_KEY, '1');
-      if (remember) localStorage.setItem(AUTH_KEY, '1');
-      else localStorage.removeItem(AUTH_KEY);
+    errorEl.style.display = 'none';
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Entrando…';
 
-      qs('#logged-user-label').textContent = `👤 ${user}`;
-      passIn.value = '';
-      showApp();
-    } else {
-      errorEl.style.display = 'block';
-      card.querySelector('.login-submit').classList.add('shake');
-      setTimeout(() => card.querySelector('.login-submit').classList.remove('shake'), 350);
-      passIn.value = '';
-      passIn.focus();
-    }
+    const persistence = qs('#login-remember').checked
+      ? firebase.auth.Auth.Persistence.LOCAL
+      : firebase.auth.Auth.Persistence.SESSION;
+
+    auth.setPersistence(persistence)
+      .then(() => auth.signInWithEmailAndPassword(email, pass))
+      .then(() => { passIn.value = ''; })
+      .catch(err => {
+        errorEl.textContent = mapAuthError(err.code);
+        errorEl.style.display = 'block';
+        card.querySelector('.login-submit').classList.add('shake');
+        setTimeout(() => card.querySelector('.login-submit').classList.remove('shake'), 350);
+        passIn.value = '';
+        passIn.focus();
+      })
+      .finally(() => {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Entrar';
+      });
   });
+}
+
+function mapAuthError(code) {
+  const map = {
+    'auth/invalid-email':         'E-mail inválido.',
+    'auth/user-not-found':        'Usuário não encontrado.',
+    'auth/wrong-password':        'Senha incorreta.',
+    'auth/invalid-credential':    'E-mail ou senha incorretos.',
+    'auth/invalid-login-credentials': 'E-mail ou senha incorretos.',
+    'auth/too-many-requests':     'Muitas tentativas. Aguarde um momento e tente novamente.',
+    'auth/network-request-failed':'Sem conexão com a internet.',
+    'auth/user-disabled':         'Esta conta foi desativada.',
+  };
+  return map[code] || 'Não foi possível entrar. Tente novamente.';
 }
 
 function doLogout() {
   if (!confirm('Deseja sair do sistema?')) return;
-  sessionStorage.removeItem(AUTH_KEY);
-  localStorage.removeItem(AUTH_KEY);
-  alarmTimers.forEach(clearTimeout);
-  alarmTimers = [];
+  detachFirestoreListener();
+  auth.signOut();
+  // o listener onAuthStateChanged cuida de mostrar a tela de login
   qs('#login-user').value = '';
   qs('#login-pass').value = '';
   qs('#login-error').style.display = 'none';
-  showLogin();
 }
 
 /* ═══════════════════════════════════════════════
-   STORAGE
+   STORAGE — Firestore (sincroniza entre dispositivos)
    ═══════════════════════════════════════════════ */
-function loadDB() {
-  try {
-    const raw = localStorage.getItem(DB_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      state.textos    = parsed.textos    || [];
-      state.tutoriais = parsed.tutoriais || [];
-      state.lembretes = parsed.lembretes || [];
-      state.chamados  = parsed.chamados  || [];
+function attachFirestoreListener(uid) {
+  const docRef = db.collection('supportbase').doc(uid);
+  unsubscribeSnapshot = docRef.onSnapshot(snap => {
+    if (snap.exists) {
+      const data = snap.data();
+      const incomingJSON = JSON.stringify(data);
+      if (incomingJSON === _lastSyncedJSON) {
+        // eco do nosso próprio save — apenas confirma sincronização
+        if (!_firstSnapshotLoaded) finishFirstLoad();
+        setSyncStatus('synced');
+        return;
+      }
+      _lastSyncedJSON = incomingJSON;
+      state.textos    = data.textos    || [];
+      state.tutoriais = data.tutoriais || [];
+      state.lembretes = data.lembretes || [];
+      state.chamados  = data.chamados  || [];
+      history   = data.history   || [];
+      favorites = data.favorites || {};
+
+      if (!_firstSnapshotLoaded) finishFirstLoad();
+      refreshAllViews();
+      setSyncStatus('synced');
+    } else {
+      // primeiro acesso: cria o documento vazio
+      const empty = { textos:[], tutoriais:[], lembretes:[], chamados:[], history:[], favorites:{}, updatedAt: Date.now() };
+      _lastSyncedJSON = JSON.stringify(empty);
+      docRef.set(empty).then(() => {
+        if (!_firstSnapshotLoaded) finishFirstLoad();
+      });
     }
-    history   = JSON.parse(localStorage.getItem(HIST_KEY) || '[]');
-    favorites = JSON.parse(localStorage.getItem(FAV_KEY)  || '{}');
-  } catch(e) { console.warn('Erro ao carregar DB', e); }
+  }, err => {
+    console.error('Erro Firestore:', err);
+    setSyncStatus('error');
+    if (!_firstSnapshotLoaded) finishFirstLoad();
+    toast('⚠️ Erro de sincronização. Verifique sua conexão.', 'error');
+  });
 }
-function saveDB()      { localStorage.setItem(DB_KEY,   JSON.stringify(state)); }
-function saveHistory() { localStorage.setItem(HIST_KEY, JSON.stringify(history)); }
-function saveFavs()    { localStorage.setItem(FAV_KEY,  JSON.stringify(favorites)); }
+
+function detachFirestoreListener() {
+  if (unsubscribeSnapshot) { unsubscribeSnapshot(); unsubscribeSnapshot = null; }
+  _lastSyncedJSON = null;
+}
+
+function finishFirstLoad() {
+  _firstSnapshotLoaded = true;
+  hide(qs('#loading-overlay'));
+  show(qs('#app'));
+  renderHistory();
+  renderFavorites();
+  renderCategoryChips();
+  scheduleAllAlarms();
+  updateBadges();
+  updateListCounts();
+}
+
+// re-renderiza tudo que depende de `state`/`history`/`favorites`
+// (chamado quando os dados mudam em OUTRO dispositivo)
+function refreshAllViews() {
+  renderHistory();
+  renderFavorites();
+  renderCategoryChips();
+  scheduleAllAlarms();
+  updateBadges();
+  updateListCounts();
+  if (qs('#search-input').value.trim()) doSearch();
+  if (qs('#modal-reminders').style.display !== 'none') renderLembretes();
+  if (qs('#modal-chamados').style.display !== 'none') renderChamados();
+  if (qs('#modal-list').style.display !== 'none') renderListContent();
+}
+
+// salva tudo (textos, tutoriais, lembretes, chamados, histórico, favoritos)
+// em UM único documento, com debounce para não gerar escritas excessivas
+function scheduleSave() {
+  setSyncStatus('saving');
+  clearTimeout(saveDebounceTimer);
+  saveDebounceTimer = setTimeout(doSaveToFirestore, 600);
+}
+function doSaveToFirestore() {
+  if (!currentUser || !db) return;
+  const payload = {
+    textos: state.textos, tutoriais: state.tutoriais,
+    lembretes: state.lembretes, chamados: state.chamados,
+    history, favorites, updatedAt: Date.now()
+  };
+  _lastSyncedJSON = JSON.stringify(payload);
+  db.collection('supportbase').doc(currentUser.uid).set(payload)
+    .then(() => setSyncStatus('synced'))
+    .catch(err => { console.error('Erro ao salvar:', err); setSyncStatus('error'); toast('⚠️ Erro ao salvar. Tentando novamente…','error'); });
+}
+
+function setSyncStatus(status) {
+  const el = qs('#sync-status');
+  if (!el) return;
+  if (status === 'saving') { el.textContent='🔄'; el.title='Salvando…'; }
+  if (status === 'synced') { el.textContent='☁️'; el.title='Sincronizado'; }
+  if (status === 'error')  { el.textContent='⚠️'; el.title='Erro de sincronização — verifique sua conexão'; }
+}
+
+function saveDB()      { scheduleSave(); }
+function saveHistory() { scheduleSave(); }
+function saveFavs()    { scheduleSave(); }
 
 /* ═══════════════════════════════════════════════
    BIND EVENTS — tudo em um lugar

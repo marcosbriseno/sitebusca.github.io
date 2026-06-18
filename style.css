@@ -680,21 +680,8 @@ mark { background: rgba(56,189,248,0.25); color: var(--cyan); border-radius: 2px
   }
   .header-brand .brand-name { font-size: 14px; }
   .header-brand .brand-icon { font-size: 16px; }
-  .header-actions {
-    flex: 1;
-    justify-content: flex-end;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    flex-wrap: nowrap;
-    padding-bottom: 2px;
-  }
-  .header-actions::-webkit-scrollbar { display: none; }
-  .header-actions .btn-ghost { flex-shrink: 0; padding: 7px 10px; }
-  .header-actions .btn-ghost span:not(.icon) { display: none; }
-  .header-actions .btn-ghost .icon { font-size: 16px; }
+  /* desktop-nav ocultado no mobile — menu hamburger assume */
   .header-divider, .logged-user { display: none; }
-  .btn-logout { order: 99; }
 
   /* ── HERO / BUSCA ── */
   .hero { padding: 24px 14px 18px; }
@@ -841,8 +828,10 @@ mark { background: rgba(56,189,248,0.25); color: var(--cyan); border-radius: 2px
 .mobile-menu-overlay {
   position: fixed; inset: 0; z-index: 149;
   background: rgba(0,0,0,0.5); backdrop-filter: blur(2px);
+  display: none;
 }
 .mobile-menu {
+  display: none;
   position: fixed; top: 52px; right: 0; z-index: 150;
   width: min(280px, 88vw);
   background: var(--bg-surface); border: 1px solid var(--border);
@@ -957,6 +946,4 @@ mark { background: rgba(56,189,248,0.25); color: var(--cyan); border-radius: 2px
   .postits-bar { padding: 10px 12px 2px; }
 }
 
-@media (min-width: 701px) {
-  .mobile-nav, .mobile-menu, .mobile-menu-overlay { display: none !important; }
-}
+/* mobile-menu e overlay ocultados por padrão via display:none no próprio seletor */

@@ -1415,16 +1415,18 @@ function toggleMobileMenu() {
   const menu    = qs('#mobile-menu');
   const overlay = qs('#mobile-menu-overlay');
   const btn     = qs('#hamburger-btn');
-  const isOpen  = menu.style.display !== 'none';
+  const isOpen  = menu.style.display === 'block';
   if (isOpen) closeMobileMenu();
   else {
-    show(menu); show(overlay);
+    menu.style.display    = 'block';
+    overlay.style.display = 'block';
     btn.classList.add('open');
     menu.setAttribute('aria-hidden','false');
   }
 }
 function closeMobileMenu() {
-  hide(qs('#mobile-menu')); hide(qs('#mobile-menu-overlay'));
+  qs('#mobile-menu').style.display    = 'none';
+  qs('#mobile-menu-overlay').style.display = 'none';
   qs('#hamburger-btn').classList.remove('open');
   qs('#mobile-menu').setAttribute('aria-hidden','true');
 }

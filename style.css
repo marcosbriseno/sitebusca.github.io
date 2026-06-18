@@ -796,8 +796,10 @@ mark { background: rgba(56,189,248,0.25); color: var(--cyan); border-radius: 2px
 /* ═══════════════════════════════════════════════
    MENU HAMBURGUER MOBILE
    ═══════════════════════════════════════════════ */
+/* DESKTOP: mostra desktop-nav, esconde mobile */
 .desktop-nav { display: flex; }
 .mobile-nav  { display: none; align-items: center; gap: 8px; }
+.mobile-menu, .mobile-menu-overlay { display: none; }
 
 .hamburger-btn {
   display: flex; flex-direction: column; justify-content: center;
@@ -938,12 +940,20 @@ mark { background: rgba(56,189,248,0.25); color: var(--cyan); border-radius: 2px
    ═══════════════════════════════════════════════ */
 @media (max-width: 700px) {
   .desktop-nav { display: none !important; }
-  .mobile-nav  { display: flex; }
+  .mobile-nav  { display: flex !important; }
   .header { position: relative; }
 
   /* post-its menores */
   .postit { width: 145px; min-height: 80px; font-size: 12px; }
   .postits-bar { padding: 10px 12px 2px; }
+}
+
+/* DESKTOP (≥701px): força ocultar tudo que é mobile */
+@media (min-width: 701px) {
+  .mobile-nav { display: none !important; }
+  .mobile-menu { display: none !important; }
+  .mobile-menu-overlay { display: none !important; }
+  .hamburger-btn { display: none !important; }
 }
 
 /* mobile-menu e overlay ocultados por padrão via display:none no próprio seletor */

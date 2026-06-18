@@ -56,22 +56,64 @@
       <span class="brand-icon">⚡</span>
       <span class="brand-name">SupportBase</span>
     </div>
-    <nav class="header-actions">
+
+    <!-- DESKTOP NAV -->
+    <nav class="header-actions desktop-nav">
       <button class="btn-ghost" id="btn-open-register"><span class="icon">＋</span> Cadastrar</button>
-       <button class="btn-ghost btn-reminders" id="btn-open-reminders" title="Lembretes">
+      <button class="btn-ghost" id="btn-open-list"><span class="icon">☰</span> Lista</button>
+      <button class="btn-ghost btn-reminders" id="btn-open-reminders">
         🔔 Lembretes<span class="badge-count" id="reminder-badge" style="display:none"></span>
       </button>
-      <button class="btn-ghost btn-chamados" id="btn-open-chamados" title="Chamados">📋 Chamados<span class="badge-count" id="chamados-badge" style="display:none"></span></button>
-      <button class="btn-ghost" id="btn-open-list" title="Lista completa"><span class="icon">☰</span> Lista</button>
+      <button class="btn-ghost btn-chamados" id="btn-open-chamados">
+        📋 Chamados<span class="badge-count" id="chamados-badge" style="display:none"></span>
+      </button>
       <button class="btn-ghost" id="btn-backup"><span class="icon">⬇</span> Backup</button>
       <button class="btn-ghost" id="btn-restore-trigger"><span class="icon">⬆</span> Restaurar</button>
       <input type="file" id="input-restore" accept=".json" style="display:none" />
       <span class="header-divider"></span>
       <span class="logged-user" id="logged-user-label">👤 …</span>
-      <span class="sync-status" id="sync-status" title="Status de sincronização">☁️</span>
-      <button class="btn-ghost btn-logout" id="btn-logout" title="Sair"><span class="icon">⏻</span> Sair</button>
+      <span class="sync-status" id="sync-status" title="Sincronização">☁️</span>
+      <button class="btn-ghost btn-logout" id="btn-logout"><span class="icon">⏻</span> Sair</button>
     </nav>
+
+    <!-- MOBILE NAV -->
+    <div class="mobile-nav">
+      <span class="sync-status mobile-sync" id="sync-status-mobile" title="Sincronização">☁️</span>
+      <span class="badge-count mobile-badge" id="mobile-badge-count" style="display:none"></span>
+      <button class="hamburger-btn" id="hamburger-btn" aria-label="Menu">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
   </header>
+
+  <!-- MENU DROPDOWN MOBILE -->
+  <div class="mobile-menu-overlay" id="mobile-menu-overlay" style="display:none"></div>
+  <div class="mobile-menu" id="mobile-menu" aria-hidden="true">
+    <div class="mobile-menu-header">
+      <span class="mobile-user-label" id="mobile-user-label">👤 …</span>
+      <span class="sync-status" id="sync-status-m2">☁️</span>
+    </div>
+    <div class="mobile-menu-items">
+      <button class="mobile-menu-item" id="m-btn-register">＋ Cadastrar</button>
+      <button class="mobile-menu-item" id="m-btn-list">☰ Lista Completa</button>
+      <button class="mobile-menu-item mobile-item-amber" id="m-btn-reminders">
+        🔔 Lembretes <span class="badge-count" id="m-reminder-badge" style="display:none"></span>
+      </button>
+      <button class="mobile-menu-item mobile-item-cyan" id="m-btn-chamados">
+        📋 Chamados <span class="badge-count" id="m-chamados-badge" style="display:none"></span>
+      </button>
+      <div class="mobile-menu-divider"></div>
+      <button class="mobile-menu-item" id="m-btn-backup">⬇ Backup</button>
+      <button class="mobile-menu-item" id="m-btn-restore">⬆ Restaurar</button>
+      <div class="mobile-menu-divider"></div>
+      <button class="mobile-menu-item mobile-item-red" id="m-btn-logout">⏻ Sair</button>
+    </div>
+  </div>
+
+  <!-- ═══════════ POST-ITS LEMBRETES ═══════════ -->
+  <div class="postits-bar" id="postits-bar" style="display:none">
+    <div class="postits-scroll" id="postits-scroll"></div>
+  </div>
 
   <!-- ═══════════ HERO / BUSCA ═══════════ -->
   <section class="hero">
@@ -169,6 +211,7 @@
           <option value="doc">📄 Documento / Passo a passo</option>
           <option value="link">🌐 Link externo</option>
           <option value="video">🎥 Vídeo</option>
+          <option value="email">📧 Modelo de E-mail</option>
         </select>
       </div>
       <div class="form-group">
@@ -179,6 +222,29 @@
         <label>URL (se link externo ou vídeo)</label>
         <input type="url" id="tutorial-url" placeholder="https://…" />
       </div>
+
+      <!-- CAMPOS DE E-MAIL (só aparecem quando tipo = email) -->
+      <div id="group-email-fields" style="display:none">
+        <div class="email-fields-title">📧 Configuração do E-mail</div>
+        <div class="form-group">
+          <label>Para (To) *</label>
+          <input type="text" id="email-to" placeholder="email@empresa.com, outro@empresa.com" />
+          <small>Separe múltiplos endereços com vírgula</small>
+        </div>
+        <div class="form-group">
+          <label>CC (Com cópia)</label>
+          <input type="text" id="email-cc" placeholder="cc@empresa.com" />
+        </div>
+        <div class="form-group">
+          <label>BCC (Cópia oculta)</label>
+          <input type="text" id="email-bcc" placeholder="bcc@empresa.com" />
+        </div>
+        <div class="form-group">
+          <label>Assunto *</label>
+          <input type="text" id="email-subject" placeholder="Assunto do e-mail — use {placeholders} se quiser" />
+        </div>
+      </div>
+
       <div class="form-group">
         <label>Descrição / Resumo</label>
         <textarea id="tutorial-desc" rows="3" placeholder="Breve descrição do que este tutorial resolve…"></textarea>
@@ -216,6 +282,7 @@
     <div class="tutorial-body" id="view-tutorial-body"></div>
     <div class="modal-footer">
       <button class="btn-secondary" id="btn-close-tutorial-view">Fechar</button>
+      <button class="btn-ghost" id="btn-open-email-outlook" style="display:none">📧 Abrir no Outlook</button>
       <button class="btn-primary" id="btn-open-new-tab">🌐 Abrir em nova aba</button>
     </div>
   </div>

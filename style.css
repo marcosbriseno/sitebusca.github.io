@@ -805,3 +805,158 @@ mark { background: rgba(56,189,248,0.25); color: var(--cyan); border-radius: 2px
   .badge { font-size: 10px; padding: 2px 6px; }
   .card-badges { gap: 4px; }
 }
+
+/* ═══════════════════════════════════════════════
+   MENU HAMBURGUER MOBILE
+   ═══════════════════════════════════════════════ */
+.desktop-nav { display: flex; }
+.mobile-nav  { display: none; align-items: center; gap: 8px; }
+
+.hamburger-btn {
+  display: flex; flex-direction: column; justify-content: center;
+  gap: 5px; width: 38px; height: 38px; padding: 6px;
+  background: transparent; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); cursor: pointer; transition: all var(--transition);
+}
+.hamburger-btn span {
+  display: block; width: 100%; height: 2px;
+  background: var(--text-secondary); border-radius: 2px;
+  transition: all 0.25s;
+}
+.hamburger-btn.open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+.hamburger-btn.open span:nth-child(2) { opacity: 0; transform: scaleX(0); }
+.hamburger-btn.open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+.hamburger-btn:hover { border-color: var(--cyan); }
+.hamburger-btn:hover span { background: var(--cyan); }
+
+.mobile-sync { font-size: 14px; }
+.mobile-badge {
+  position: absolute; top: 10px; right: 52px;
+  background: var(--red); color: #fff; font-size: 10px; font-weight: 700;
+  min-width: 16px; height: 16px; padding: 0 4px;
+  border-radius: 99px; line-height: 16px;
+}
+
+/* OVERLAY + DRAWER */
+.mobile-menu-overlay {
+  position: fixed; inset: 0; z-index: 149;
+  background: rgba(0,0,0,0.5); backdrop-filter: blur(2px);
+}
+.mobile-menu {
+  position: fixed; top: 52px; right: 0; z-index: 150;
+  width: min(280px, 88vw);
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  box-shadow: var(--shadow-modal);
+  animation: slide-down-menu 0.2s ease;
+  overflow: hidden;
+}
+@keyframes slide-down-menu {
+  from { opacity: 0; transform: translateY(-12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.mobile-menu-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+.mobile-user-label { font-size: 13px; color: var(--text-secondary); font-family: var(--font-mono); }
+.mobile-menu-items { padding: 8px 0; }
+.mobile-menu-item {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 13px 18px;
+  background: transparent; border: none;
+  color: var(--text-primary); font-family: var(--font-ui); font-size: 14px;
+  cursor: pointer; transition: background var(--transition); text-align: left;
+}
+.mobile-menu-item:hover, .mobile-menu-item:active { background: var(--bg-hover); }
+.mobile-item-amber { color: var(--amber); }
+.mobile-item-cyan  { color: var(--cyan); }
+.mobile-item-red   { color: var(--red); }
+.mobile-menu-divider { height: 1px; background: var(--border); margin: 6px 0; }
+
+/* ═══════════════════════════════════════════════
+   POST-ITS LEMBRETES (home)
+   ═══════════════════════════════════════════════ */
+.postits-bar {
+  padding: 12px 20px 4px;
+  background: var(--bg-base);
+  border-bottom: 1px solid var(--border);
+}
+.postits-scroll {
+  display: flex; gap: 10px;
+  overflow-x: auto; padding-bottom: 10px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.postit {
+  flex-shrink: 0; width: 170px; min-height: 90px;
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  cursor: pointer; transition: transform 0.15s, box-shadow 0.15s;
+  position: relative; overflow: hidden;
+  border-top: 3px solid transparent;
+  font-size: 13px; line-height: 1.5;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.35);
+}
+.postit:hover { transform: translateY(-3px) rotate(-0.5deg); box-shadow: 0 8px 20px rgba(0,0,0,0.45); }
+
+.postit.prio-baixa   { background: #1a2e1a; border-top-color: var(--green);  }
+.postit.prio-media   { background: #2e2510; border-top-color: var(--amber);  }
+.postit.prio-alta    { background: #2e1e0a; border-top-color: var(--orange); }
+.postit.prio-urgente { background: #2e0f0f; border-top-color: var(--red);    }
+.postit.done         { opacity: 0.4; text-decoration: line-through; }
+.postit.overdue      { animation: postit-pulse 2s infinite; }
+@keyframes postit-pulse {
+  0%,100% { box-shadow: 0 3px 10px rgba(248,113,113,0.2); }
+  50%      { box-shadow: 0 3px 18px rgba(248,113,113,0.55); }
+}
+
+.postit-pin {
+  position: absolute; top: -4px; left: 50%; transform: translateX(-50%);
+  font-size: 16px; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5));
+}
+.postit-title {
+  font-weight: 600; font-size: 13px; margin-top: 10px; margin-bottom: 4px;
+  color: var(--text-primary);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.postit-time {
+  font-family: var(--font-mono); font-size: 10.5px; color: var(--text-muted);
+}
+.postit-done-btn {
+  position: absolute; bottom: 8px; right: 8px;
+  background: rgba(255,255,255,0.08); border: none;
+  border-radius: 50%; width: 22px; height: 22px;
+  font-size: 11px; cursor: pointer; color: var(--text-muted);
+  transition: all var(--transition); display: flex; align-items: center; justify-content: center;
+}
+.postit-done-btn:hover { background: rgba(74,222,128,0.2); color: var(--green); }
+
+/* ═══════════════════════════════════════════════
+   E-MAIL FIELDS (cadastro tutorial)
+   ═══════════════════════════════════════════════ */
+.email-fields-title {
+  font-size: 12px; font-family: var(--font-mono); text-transform: uppercase;
+  letter-spacing: 1px; color: var(--cyan); margin-bottom: 14px;
+  padding-bottom: 8px; border-bottom: 1px solid var(--border);
+}
+
+/* ═══════════════════════════════════════════════
+   RESPONSIVO MOBILE (sobrescreve/complementa)
+   ═══════════════════════════════════════════════ */
+@media (max-width: 700px) {
+  .desktop-nav { display: none !important; }
+  .mobile-nav  { display: flex; }
+  .header { position: relative; }
+
+  /* post-its menores */
+  .postit { width: 145px; min-height: 80px; font-size: 12px; }
+  .postits-bar { padding: 10px 12px 2px; }
+}
+
+@media (min-width: 701px) {
+  .mobile-nav, .mobile-menu, .mobile-menu-overlay { display: none !important; }
+}

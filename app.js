@@ -46,6 +46,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (user) {
       currentUser = user;
       qs('#logged-user-label').textContent = `👤 ${user.email}`;
+    const mobileLabel=qs('#mobile-user-label'); if(mobileLabel) mobileLabel.textContent=`👤 ${user.email}`;
       attachFirestoreListener(user.uid);
       showApp();
     } else {
@@ -209,8 +210,10 @@ function finishFirstLoad() {
   renderHistory();
   renderFavorites();
   renderCategoryChips();
+  renderPostIts();
   scheduleAllAlarms();
   updateBadges();
+  updateMobileBadges();
   updateListCounts();
 }
 
@@ -220,8 +223,10 @@ function refreshAllViews() {
   renderHistory();
   renderFavorites();
   renderCategoryChips();
+  renderPostIts();
   scheduleAllAlarms();
   updateBadges();
+  updateMobileBadges();
   updateListCounts();
   if (qs('#search-input').value.trim()) doSearch();
   if (qs('#modal-reminders').style.display !== 'none') renderLembretes();
@@ -250,11 +255,13 @@ function doSaveToFirestore() {
 }
 
 function setSyncStatus(status) {
-  const el = qs('#sync-status');
-  if (!el) return;
-  if (status === 'saving') { el.textContent='🔄'; el.title='Salvando…'; }
-  if (status === 'synced') { el.textContent='☁️'; el.title='Sincronizado'; }
-  if (status === 'error')  { el.textContent='⚠️'; el.title='Erro de sincronização — verifique sua conexão'; }
+  const icons = { saving:'🔄', synced:'☁️', error:'⚠️' };
+  const titles = { saving:'Salvando…', synced:'Sincronizado', error:'Erro de sincronização' };
+  [qs('#sync-status'), qs('#sync-status-mobile'), qs('#sync-status-m2')].forEach(el=>{
+    if (!el) return;
+    el.textContent = icons[status]||'☁️';
+    el.title = titles[status]||'';
+  });
 }
 
 function saveDB()      { scheduleSave(); }
@@ -267,6 +274,30 @@ function saveFavs()    { scheduleSave(); }
 function bindEvents() {
   /* ── LOGOUT ── */
   qs('#btn-logout').addEventListener('click', doLogout);
+
+  /* ── MENU HAMBURGER MOBILE ── */
+  qs('#hamburger-btn').addEventListener('click', toggleMobileMenu);
+  qs('#mobile-menu-overlay').addEventListener('click', closeMobileMenu);
+
+  // espelha ações do desktop no mobile
+  const mobileMap = {
+    'm-btn-register':  '#btn-open-register',
+    'm-btn-list':      '#btn-open-list',
+    'm-btn-reminders': '#btn-open-reminders',
+    'm-btn-chamados':  '#btn-open-chamados',
+    'm-btn-backup':    '#btn-backup',
+    'm-btn-logout':    '#btn-logout',
+  };
+  Object.entries(mobileMap).forEach(([mobileId, desktopId]) => {
+    qs(`#${mobileId}`)?.addEventListener('click', () => {
+      closeMobileMenu();
+      setTimeout(() => qs(desktopId)?.click(), 80);
+    });
+  });
+  qs('#m-btn-restore')?.addEventListener('click', () => {
+    closeMobileMenu();
+    setTimeout(() => qs('#input-restore').click(), 80);
+  });
 
   /* ── BUSCA ── */
   const si = qs('#search-input');
@@ -335,6 +366,7 @@ function bindEvents() {
   qs('#modal-view-close').addEventListener('click', () => hide(qs('#modal-view-tutorial')));
   qs('#btn-close-tutorial-view').addEventListener('click', () => hide(qs('#modal-view-tutorial')));
   qs('#btn-open-new-tab').addEventListener('click', openTutorialNewTab);
+  qs('#btn-open-email-outlook').addEventListener('click', openEmailOutlook);
   qs('#modal-view-tutorial').addEventListener('click', e => { if (e.target === qs('#modal-view-tutorial')) hide(qs('#modal-view-tutorial')); });
 
   /* ── PLACEHOLDERS ── */
@@ -534,7 +566,11 @@ function openTutorialView(item) {
   if (item.content) html += item.content;
   else if (item.url) html += `<p><a href="${escHtml(item.url)}" target="_blank">${escHtml(item.url)}</a></p>`;
   body.innerHTML = html || '<p style="color:var(--text-muted)">Sem conteúdo.</p>';
-  qs('#btn-open-new-tab').style.display = item.url ? 'inline-flex' : 'none';
+  const isEmail = (item.tutorialType||item.type)==='email';
+  qs('#btn-open-new-tab').style.display      = (!isEmail && item.url) ? 'inline-flex' : 'none';
+  qs('#btn-open-email-outlook').style.display = isEmail ? 'inline-flex' : 'none';
+  // guardar referência para abrir Outlook
+  qs('#btn-open-email-outlook').dataset.tutId = item.id;
   show(qs('#modal-view-tutorial'));
 }
 
@@ -581,6 +617,10 @@ function openModalEdit(id, kind) {
     qs('#tutorial-url').value = item.url||'';
     qs('#tutorial-desc').value = item.description||'';
     qs('#tutorial-content').innerHTML = item.content||'';
+    qs('#email-to').value      = item.emailTo||'';
+    qs('#email-cc').value      = item.emailCc||'';
+    qs('#email-bcc').value     = item.emailBcc||'';
+    qs('#email-subject').value = item.emailSubject||'';
     renderTagsPreview('tutorial'); toggleTutorialFields();
   }
   show(qs('#modal-register'));
@@ -593,6 +633,10 @@ function clearForms() {
   qs('#tutorial-content').innerHTML='';
   qs('#texto-tags-preview').innerHTML='';
   qs('#tutorial-tags-preview').innerHTML='';
+  ['email-to','email-cc','email-bcc','email-subject'].forEach(id=>{ const el=qs(`#${id}`); if(el) el.value=''; });
+  qs('#group-email-fields').style.display='none';
+  qs('#group-tutorial-url').style.display='none';
+  qs('#group-tutorial-content').style.display='block';
 }
 function switchModalTab(tab) {
   qsa('.modal-tab').forEach(t => t.classList.toggle('active', t.dataset.tab===tab));
@@ -601,7 +645,9 @@ function switchModalTab(tab) {
 }
 function toggleTutorialFields() {
   const type = qs('#tutorial-type').value;
-  qs('#group-tutorial-url').style.display = type!=='doc' ? 'block' : 'none';
+  qs('#group-tutorial-url').style.display    = (type==='link'||type==='video') ? 'block' : 'none';
+  qs('#group-email-fields').style.display    = type==='email' ? 'block' : 'none';
+  qs('#group-tutorial-content').style.display = type!=='link' ? 'block' : 'none';
 }
 function renderTagsPreview(prefix) {
   const tags = qs(`#${prefix}-keyword`).value.split(',').map(t=>t.trim()).filter(Boolean);
@@ -630,7 +676,20 @@ function saveTutorial() {
   const kw=qs('#tutorial-keyword').value.trim(), title=qs('#tutorial-title').value.trim();
   if (!kw||!title) { toast('Preencha palavra-chave e título','warn'); return; }
   const editId=qs('#edit-id-tutorial').value;
-  const item = { keyword:kw, category:qs('#tutorial-category').value.trim(), tutorialType:qs('#tutorial-type').value, title, url:qs('#tutorial-url').value.trim(), description:qs('#tutorial-desc').value.trim(), content:qs('#tutorial-content').innerHTML, createdAt:Date.now() };
+  const tutType = qs('#tutorial-type').value;
+  const item = {
+    keyword:kw, category:qs('#tutorial-category').value.trim(),
+    tutorialType: tutType, title,
+    url:         qs('#tutorial-url').value.trim(),
+    description: qs('#tutorial-desc').value.trim(),
+    content:     qs('#tutorial-content').innerHTML,
+    // campos de email
+    emailTo:      tutType==='email' ? qs('#email-to').value.trim()      : '',
+    emailCc:      tutType==='email' ? qs('#email-cc').value.trim()      : '',
+    emailBcc:     tutType==='email' ? qs('#email-bcc').value.trim()     : '',
+    emailSubject: tutType==='email' ? qs('#email-subject').value.trim() : '',
+    createdAt:    Date.now()
+  };
   if (editId) {
     const idx=state.tutoriais.findIndex(t=>t.id===editId);
     if (idx>-1) state.tutoriais[idx]={...state.tutoriais[idx],...item};
@@ -1284,6 +1343,8 @@ function updateBadges() {
   const openCham=state.chamados.filter(c=>c.status==='aberto'||c.status==='andamento').length;
   const cbadge=qs('#chamados-badge');
   if (openCham>0) { cbadge.textContent=openCham; show(cbadge); } else hide(cbadge);
+  updateMobileBadges();
+  renderPostIts();
 }
 
 /* ═══════════════════════════════════════════════
@@ -1348,6 +1409,133 @@ function toast(msg, type='info') {
 }
 
 /* ═══════════════════════════════════════════════
+   MENU HAMBURGER MOBILE
+   ═══════════════════════════════════════════════ */
+function toggleMobileMenu() {
+  const menu    = qs('#mobile-menu');
+  const overlay = qs('#mobile-menu-overlay');
+  const btn     = qs('#hamburger-btn');
+  const isOpen  = menu.style.display !== 'none';
+  if (isOpen) closeMobileMenu();
+  else {
+    show(menu); show(overlay);
+    btn.classList.add('open');
+    menu.setAttribute('aria-hidden','false');
+  }
+}
+function closeMobileMenu() {
+  hide(qs('#mobile-menu')); hide(qs('#mobile-menu-overlay'));
+  qs('#hamburger-btn').classList.remove('open');
+  qs('#mobile-menu').setAttribute('aria-hidden','true');
+}
+
+// Sincronizar badge mobile com desktop
+function updateMobileBadges() {
+  const remPending = state.lembretes.filter(l=>!l.done).length;
+  const chamOpen   = state.chamados.filter(c=>c.status==='aberto'||c.status==='andamento').length;
+  const total = remPending + chamOpen;
+  const mb = qs('#mobile-badge-count');
+  if (mb) { mb.textContent=total; mb.style.display=total>0?'block':'none'; }
+  // badges dentro do menu
+  const mrb=qs('#m-reminder-badge'); if(mrb){ mrb.textContent=remPending; mrb.style.display=remPending>0?'inline':'none'; }
+  const mcb=qs('#m-chamados-badge'); if(mcb){ mcb.textContent=chamOpen; mcb.style.display=chamOpen>0?'inline':'none'; }
+  // sync status mobile
+  const smob=qs('#sync-status-mobile');
+  const sm2=qs('#sync-status-m2');
+  const mainSync=qs('#sync-status');
+  if(mainSync && smob) smob.textContent=mainSync.textContent;
+  if(mainSync && sm2)  sm2.textContent=mainSync.textContent;
+}
+
+/* ═══════════════════════════════════════════════
+   ABRIR E-MAIL NO OUTLOOK
+   ═══════════════════════════════════════════════ */
+function openEmailOutlook() {
+  const id = qs('#btn-open-email-outlook').dataset.tutId;
+  const item = state.tutoriais.find(t=>t.id===id);
+  if (!item) return;
+
+  // Resolve placeholders automáticos no assunto e corpo
+  const subject = resolveAutoPlaceholders(item.emailSubject||'');
+  const bodyHtml = item.content||'';
+
+  // Converte HTML do corpo para texto plano (mailto não suporta HTML)
+  const tmp = document.createElement('div');
+  tmp.innerHTML = bodyHtml;
+  const bodyText = tmp.innerText || tmp.textContent || '';
+  const bodyResolved = resolveAutoPlaceholders(bodyText);
+
+  // Monta a URL mailto
+  const params = new URLSearchParams();
+  if (item.emailCc)  params.set('cc',  item.emailCc);
+  if (item.emailBcc) params.set('bcc', item.emailBcc);
+  if (subject)       params.set('subject', subject);
+  if (bodyResolved)  params.set('body', bodyResolved);
+
+  const toField = item.emailTo || '';
+  const mailto  = `mailto:${encodeURIComponent(toField)}?${params.toString()}`;
+
+  // Abre no cliente de e-mail padrão (Outlook se configurado)
+  window.location.href = mailto;
+  hide(qs('#modal-view-tutorial'));
+  toast('📧 Abrindo Outlook…','info');
+}
+
+/* ═══════════════════════════════════════════════
+   POST-ITS DE LEMBRETES (home)
+   ═══════════════════════════════════════════════ */
+function renderPostIts() {
+  const bar    = qs('#postits-bar');
+  const scroll = qs('#postits-scroll');
+  if (!bar || !scroll) return;
+
+  const now = Date.now();
+  // mostrar apenas não concluídos, ordenados por data
+  const pending = [...state.lembretes]
+    .filter(l => !l.done)
+    .sort((a,b) => new Date(`${a.date}T${a.time}`) - new Date(`${b.date}T${b.time}`));
+
+  if (!pending.length) { hide(bar); return; }
+  show(bar);
+
+  const pinColors = { baixa:'📌', media:'📌', alta:'🔴', urgente:'🚨' };
+
+  scroll.innerHTML = pending.map(l => {
+    const dt       = new Date(`${l.date}T${l.time}`);
+    const isOverdue = dt.getTime() < now;
+    const timeStr  = `${fmtDate(dt)} ${fmtTime(dt)}`;
+    return `
+    <div class="postit prio-${l.priority} ${isOverdue?'overdue':''}" data-id="${l.id}" title="${escHtml(l.title)}">
+      <span class="postit-pin">${pinColors[l.priority]||'📌'}</span>
+      <div class="postit-title">${escHtml(l.title)}</div>
+      <div class="postit-time">${isOverdue?'⚠️ ':''} ${timeStr}</div>
+      <button class="postit-done-btn" data-id="${l.id}" title="Marcar como concluído">✓</button>
+    </div>`;
+  }).join('');
+
+  // Clique no post-it abre modal de lembretes com esse item
+  qsa('.postit').forEach(card => {
+    card.addEventListener('click', e => {
+      if (e.target.classList.contains('postit-done-btn')) return;
+      openRemindersModal();
+    });
+  });
+
+  // Botão concluir no próprio post-it
+  qsa('.postit-done-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const id = btn.dataset.id;
+      const l  = state.lembretes.find(x=>x.id===id);
+      if (!l) return;
+      l.done = true;
+      saveDB(); renderPostIts(); updateBadges(); updateMobileBadges();
+      toast('✓ Lembrete concluído!','success');
+    });
+  });
+}
+
+/* ═══════════════════════════════════════════════
    UTILS
    ═══════════════════════════════════════════════ */
 function qs(sel)  { return document.querySelector(sel); }
@@ -1363,6 +1551,6 @@ function highlight(text,query){
   const words=query.split(/\s+/).filter(Boolean).map(w=>w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'));
   return text.replace(new RegExp(`(${words.join('|')})`, 'gi'),'<mark>$1</mark>');
 }
-function getTutorialIcon(type){ return type==='video'?'🎥':type==='link'?'🌐':'📄'; }
-function getTutorialTypeLabel(type){ return type==='video'?'Vídeo':type==='link'?'Link externo':'Documento'; }
+function getTutorialIcon(type){ return type==='video'?'🎥':type==='link'?'🌐':type==='email'?'📧':'📄'; }
+function getTutorialTypeLabel(type){ return type==='video'?'Vídeo':type==='link'?'Link externo':type==='email'?'E-mail':'Documento'; }
 function capitalizeFirst(str){ return str.charAt(0).toUpperCase()+str.slice(1).replace(/_/g,' '); }

@@ -1461,23 +1461,25 @@ function openEmailOutlook() {
   const subject = resolveAutoPlaceholders(item.emailSubject||'');
   const bodyHtml = item.content||'';
 
-  // Converte HTML do corpo para texto plano (mailto não suporta HTML)
-  const tmp = document.createElement('div');
-  tmp.innerHTML = bodyHtml;
-  const bodyText = tmp.innerText || tmp.textContent || '';
+  // Converte HTML do corpo para texto plano preservando quebras de linha
+  const bodyText = htmlToPlainText(bodyHtml);
   const bodyResolved = resolveAutoPlaceholders(bodyText);
 
-  // Monta a URL mailto
-  const params = new URLSearchParams();
-  if (item.emailCc)  params.set('cc',  item.emailCc);
-  if (item.emailBcc) params.set('bcc', item.emailBcc);
-  if (subject)       params.set('subject', subject);
-  if (bodyResolved)  params.set('body', bodyResolved);
+  // Monta a URL mailto MANUALMENTE com encodeURIComponent.
+  // (NAO usar URLSearchParams: ele codifica espaco como "+", e os
+  //  clientes de e-mail interpretam "+" literalmente, deixando o
+  //  texto cheio de sinais de mais. encodeURIComponent usa %20.)
+  const parts = [];
+  if (item.emailCc)  parts.push('cc='      + encodeURIComponent(item.emailCc));
+  if (item.emailBcc) parts.push('bcc='     + encodeURIComponent(item.emailBcc));
+  if (subject)       parts.push('subject=' + encodeURIComponent(subject));
+  if (bodyResolved)  parts.push('body='    + encodeURIComponent(bodyResolved));
 
   const toField = item.emailTo || '';
-  const mailto  = `mailto:${encodeURIComponent(toField)}?${params.toString()}`;
+  const query   = parts.length ? '?' + parts.join('&') : '';
+  const mailto  = `mailto:${encodeURIComponent(toField)}${query}`;
 
-  // Abre no cliente de e-mail padrão (Outlook se configurado)
+  // Abre no cliente de e-mail padrao (Outlook se configurado)
   window.location.href = mailto;
   hide(qs('#modal-view-tutorial'));
   toast('📧 Abrindo Outlook…','info');
@@ -1553,6 +1555,31 @@ function highlight(text,query){
   const words=query.split(/\s+/).filter(Boolean).map(w=>w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'));
   return text.replace(new RegExp(`(${words.join('|')})`, 'gi'),'<mark>$1</mark>');
 }
+// Converte o HTML do editor em texto plano preservando quebras de linha.
+// <br>, </p>, </div>, fim de <li> viram \n; <li> ganha "- " na frente.
+function htmlToPlainText(html) {
+  if (!html) return '';
+  let s = html;
+  // listas: cada item vira "- item"
+  s = s.replace(/<li[^>]*>/gi, '\n- ');
+  // quebras de bloco
+  s = s.replace(/<\/(p|div|h[1-6]|li|tr)>/gi, '\n');
+  s = s.replace(/<br\s*\/?>/gi, '\n');
+  // remove imagens (não vão no corpo de texto do mailto)
+  s = s.replace(/<img[^>]*>/gi, '');
+  // remove todas as outras tags
+  s = s.replace(/<[^>]+>/g, '');
+  // decodifica entidades HTML comuns
+  const txt = document.createElement('textarea');
+  txt.innerHTML = s;
+  s = txt.value;
+  // normaliza espaços e quebras excessivas
+  s = s.replace(/\u00a0/g, ' ');           // &nbsp; -> espaço normal
+  s = s.replace(/[ \t]+\n/g, '\n');        // espaços antes de quebra
+  s = s.replace(/\n{3,}/g, '\n\n');         // no máximo 1 linha em branco
+  return s.trim();
+}
+
 function getTutorialIcon(type){ return type==='video'?'🎥':type==='link'?'🌐':type==='email'?'📧':'📄'; }
 function getTutorialTypeLabel(type){ return type==='video'?'Vídeo':type==='link'?'Link externo':type==='email'?'E-mail':'Documento'; }
 function capitalizeFirst(str){ return str.charAt(0).toUpperCase()+str.slice(1).replace(/_/g,' '); }

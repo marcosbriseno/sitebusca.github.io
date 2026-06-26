@@ -5,7 +5,7 @@
 "use strict";
 
 /* ═══════════ ESTADO GLOBAL ═══════════ */
-let state = { textos: [], tutoriais: [], lembretes: [], contatos: [], links: [] };
+let state = { textos: [], tutoriais: [], lembretes: [], contatos: [], links: [], programas: [] };
 let history   = [];
 let favorites = {};
 let activeType      = 'textos';
@@ -202,13 +202,14 @@ function attachSharedListener() {
       state.tutoriais = data.tutoriais || [];
       state.contatos  = data.contatos  || [];
       state.links     = data.links     || [];
+      state.programas = data.programas || [];
       history   = data.history   || [];
       favorites = data.favorites || {};
       markSharedLoaded();
       refreshAllViews();
       setSyncStatus('synced');
     } else {
-      const empty = { textos:[], tutoriais:[], contatos:[], links:[], history:[], favorites:{}, updatedAt: Date.now() };
+      const empty = { textos:[], tutoriais:[], contatos:[], links:[], programas:[], history:[], favorites:{}, updatedAt: Date.now() };
       _lastSharedJSON = JSON.stringify(empty);
       docRef.set(empty).then(markSharedLoaded);
     }
@@ -299,7 +300,7 @@ function doSaveShared() {
   if (!currentUser || !db) return;
   const payload = {
     textos: state.textos, tutoriais: state.tutoriais,
-    contatos: state.contatos, links: state.links,
+    contatos: state.contatos, links: state.links, programas: state.programas,
     history, favorites, updatedAt: Date.now()
   };
   _lastSharedJSON = JSON.stringify(payload);
@@ -357,11 +358,11 @@ function bindEvents() {
   // espelha ações do desktop no mobile
   const mobileMap = {
     'm-btn-register':  '#btn-open-register',
-    'm-btn-list':      '#btn-open-list',
     'm-btn-contatos':  '#btn-open-contatos',
     'm-btn-links':     '#btn-open-links',
+    'm-btn-programas': '#btn-open-programas',
     'm-btn-reminders': '#btn-open-reminders',
-    'm-btn-backup':    '#btn-backup',
+    'm-btn-list':      '#btn-open-list',
     'm-btn-logout':    '#btn-logout',
   };
   Object.entries(mobileMap).forEach(([mobileId, desktopId]) => {
@@ -369,6 +370,11 @@ function bindEvents() {
       closeMobileMenu();
       setTimeout(() => qs(desktopId)?.click(), 80);
     });
+  });
+  // Backup/Restore mobile chamam as funções diretamente
+  qs('#m-btn-backup')?.addEventListener('click', () => {
+    closeMobileMenu();
+    setTimeout(() => doBackup(), 80);
   });
   qs('#m-btn-restore')?.addEventListener('click', () => {
     closeMobileMenu();
@@ -452,9 +458,43 @@ function bindEvents() {
   qs('#ph-confirm').addEventListener('click', () => confirmPlaceholders());
 
   /* ── BACKUP / RESTORE ── */
-  qs('#btn-backup').addEventListener('click', doBackup);
-  qs('#btn-restore-trigger').addEventListener('click', () => qs('#input-restore').click());
+  // Select "Banco de dados" (desktop): backup ou restore
+  qs('#db-select').addEventListener('change', e => {
+    const val = e.target.value;
+    if (val === 'backup') doBackup();
+    if (val === 'restore') qs('#input-restore').click();
+    e.target.value = ''; // volta ao label padrão
+  });
   qs('#input-restore').addEventListener('change', e => doRestore(e.target.files[0]));
+
+  /* ── PROGRAMAS ── */
+  qs('#btn-open-programas').addEventListener('click', openProgramasModal);
+  qs('#prog-modal-close').addEventListener('click', () => hide(qs('#modal-programas')));
+  qs('#modal-programas').addEventListener('click', e => { if (e.target === qs('#modal-programas')) hide(qs('#modal-programas')); });
+  qs('#prog-save').addEventListener('click', savePrograma);
+  qs('#prog-cancel').addEventListener('click', resetProgForm);
+  qs('#prog-search').addEventListener('input', renderProgramas);
+
+  // editor rico do manual de programa
+  qsa('.toolbar-btn[data-prog-cmd]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.execCommand(btn.dataset.progCmd, false, null);
+      qs('#prog-manual').focus();
+    });
+  });
+  qs('#prog-btn-insert-image').addEventListener('click', () => {
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = 'image/*';
+    inp.onchange = e => insertImageInto(e.target.files[0], '#prog-manual');
+    inp.click();
+  });
+  qs('#prog-manual').addEventListener('paste', e => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.type.startsWith('image/')) { e.preventDefault(); insertImageInto(item.getAsFile(), '#prog-manual'); break; }
+    }
+  });
 
   /* ── HISTÓRICO ── */
   qs('#btn-clear-history').addEventListener('click', () => {
@@ -1401,7 +1441,7 @@ function updateBadges() {
    BACKUP / RESTORE
    ═══════════════════════════════════════════════ */
 function doBackup() {
-  const data={ version:4, exportedAt:new Date().toISOString(), textos:state.textos, tutoriais:state.tutoriais, lembretes:state.lembretes, contatos:state.contatos, links:state.links, favorites, history };
+  const data={ version:5, exportedAt:new Date().toISOString(), textos:state.textos, tutoriais:state.tutoriais, lembretes:state.lembretes, contatos:state.contatos, links:state.links, programas:state.programas, favorites, history };
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob), a=document.createElement('a');
   a.href=url; a.download=`supportbase_backup_${dateStr()}.json`; a.click(); URL.revokeObjectURL(url);
@@ -1420,6 +1460,7 @@ function doRestore(file) {
       state.lembretes = data.lembretes || [];
       state.contatos  = data.contatos  || [];
       state.links     = data.links     || [];
+      state.programas = data.programas || [];
       favorites=data.favorites||{}; history=data.history||[];
       saveDB(); saveFavs(); saveHistory();
       renderHistory(); renderFavorites(); renderCategoryChips(); updateBadges(); updateListCounts(); scheduleAllAlarms();
@@ -1437,14 +1478,17 @@ async function copyToClipboard(text) {
   try { await navigator.clipboard.writeText(text); }
   catch { const ta=document.createElement('textarea'); ta.value=text; ta.style.cssText='position:fixed;opacity:0'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); }
 }
-function insertImageFile(file) {
+function insertImageFile(file) { insertImageInto(file, '#tutorial-content'); }
+
+// Insere uma imagem (como dataURL) dentro do editor indicado pelo seletor
+function insertImageInto(file, editorSel) {
   if (!file) return;
   const reader=new FileReader();
   reader.onload=e=>{
     const img=document.createElement('img'); img.src=e.target.result; img.style.maxWidth='100%';
-    const editor=qs('#tutorial-content'); editor.focus();
+    const editor=qs(editorSel); editor.focus();
     const sel=window.getSelection();
-    if (sel&&sel.rangeCount) { const r=sel.getRangeAt(0); r.insertNode(img); r.collapse(false); }
+    if (sel&&sel.rangeCount && editor.contains(sel.anchorNode)) { const r=sel.getRangeAt(0); r.insertNode(img); r.collapse(false); }
     else editor.appendChild(img);
   };
   reader.readAsDataURL(file);
@@ -1743,6 +1787,112 @@ function renderLinks() {
       toast('🗑 Link removido','info');
     });
   });
+}
+
+/* ═══════════════════════════════════════════════
+   PROGRAMAS (compartilhado)
+   ═══════════════════════════════════════════════ */
+function openProgramasModal() {
+  resetProgForm();
+  renderProgramas();
+  show(qs('#modal-programas'));
+}
+function savePrograma() {
+  const nome=qs('#prog-nome').value.trim();
+  if (!nome) { toast('Preencha o nome do programa','warn'); return; }
+  const editId=qs('#prog-edit-id').value;
+  const item = {
+    nome,
+    onedrive: qs('#prog-onedrive').value.trim(),
+    manual:   qs('#prog-manual').innerHTML,
+    updatedAt: Date.now()
+  };
+  if (editId) {
+    const idx=state.programas.findIndex(p=>p.id===editId);
+    if (idx>-1) state.programas[idx]={...state.programas[idx],...item};
+    toast('✅ Programa atualizado!','success');
+  } else {
+    state.programas.push({ id:uid(), createdAt:Date.now(), ...item });
+    toast('✅ Programa cadastrado!','success');
+  }
+  saveDB(); resetProgForm(); renderProgramas(); updateListCounts();
+}
+function resetProgForm() {
+  qs('#prog-edit-id').value=''; qs('#prog-form-title').textContent='Novo programa';
+  qs('#prog-nome').value=''; qs('#prog-onedrive').value=''; qs('#prog-manual').innerHTML='';
+}
+function renderProgramas() {
+  const list=qs('#prog-list');
+  const query=(qs('#prog-search').value||'').trim().toLowerCase();
+  let items=[...state.programas].sort((a,b)=>(a.nome||'').localeCompare(b.nome||''));
+  if (query) items=items.filter(p=>(p.nome||'').toLowerCase().includes(query));
+  if (!items.length) { list.innerHTML='<div class="empty-state" style="padding:20px">Nenhum programa.</div>'; return; }
+
+  list.innerHTML=items.map(p=>`
+    <div class="rem-card" data-id="${p.id}" style="border-left-color:var(--violet)">
+      <div class="rem-card-top">
+        <div class="rem-card-title">💿 ${escHtml(p.nome)}</div>
+        <div class="rem-card-actions">
+          ${p.manual ? `<button class="action-btn prog-btn-view" title="Ver manual">👁</button>` : ''}
+          ${p.onedrive ? `<button class="action-btn prog-btn-down" title="Abrir OneDrive">⬇</button>` : ''}
+          <button class="action-btn prog-btn-edit" title="Editar">✏️</button>
+          <button class="action-btn btn-delete delete-btn prog-btn-del" title="Deletar">🗑</button>
+        </div>
+      </div>
+      <div class="rem-card-meta">
+        ${p.onedrive ? `<span class="rem-meta-pill">☁️ <a href="${escHtml(p.onedrive)}" target="_blank" style="color:var(--cyan)">OneDrive</a></span>` : ''}
+        ${p.manual ? `<span class="rem-meta-pill">📄 Manual disponível</span>` : ''}
+      </div>
+    </div>
+  `).join('');
+
+  qsa('.prog-btn-view').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const id=btn.closest('.rem-card').dataset.id;
+      const p=state.programas.find(x=>x.id===id); if(!p) return;
+      openProgManual(p);
+    });
+  });
+  qsa('.prog-btn-down').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const id=btn.closest('.rem-card').dataset.id;
+      const p=state.programas.find(x=>x.id===id); if(!p||!p.onedrive) return;
+      window.open(p.onedrive,'_blank','noopener');
+    });
+  });
+  qsa('.prog-btn-edit').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const id=btn.closest('.rem-card').dataset.id;
+      const p=state.programas.find(x=>x.id===id); if(!p) return;
+      qs('#prog-edit-id').value=id;
+      qs('#prog-form-title').textContent='Editar programa';
+      qs('#prog-nome').value=p.nome;
+      qs('#prog-onedrive').value=p.onedrive||'';
+      qs('#prog-manual').innerHTML=p.manual||'';
+      qs('#prog-nome').scrollIntoView({behavior:'smooth'});
+    });
+  });
+  qsa('.prog-btn-del').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const id=btn.closest('.rem-card').dataset.id;
+      if (!confirm('Excluir programa?')) return;
+      state.programas=state.programas.filter(x=>x.id!==id);
+      saveDB(); renderProgramas(); updateListCounts();
+      toast('🗑 Programa removido','info');
+    });
+  });
+}
+
+// Abre o manual de instalação num modal de leitura (reusa o modal de tutorial)
+function openProgManual(p) {
+  qs('#view-tutorial-title').textContent = `💿 ${p.nome}`;
+  qs('#view-tutorial-meta').innerHTML = p.onedrive
+    ? `<span class="badge badge-tutorial">☁️ <a href="${escHtml(p.onedrive)}" target="_blank" style="color:inherit">Baixar no OneDrive</a></span>`
+    : '';
+  qs('#view-tutorial-body').innerHTML = p.manual || '<p style="color:var(--text-muted)">Sem manual cadastrado.</p>';
+  qs('#btn-open-new-tab').style.display = 'none';
+  qs('#btn-open-email-outlook').style.display = 'none';
+  show(qs('#modal-view-tutorial'));
 }
 
 /* ═══════════════════════════════════════════════

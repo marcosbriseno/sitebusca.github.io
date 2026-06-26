@@ -429,6 +429,7 @@ mark { background: rgba(189,147,249,0.28); color: var(--cyan); border-radius: 2p
 .modal-fullscreen { max-width: 1000px; max-height: 92vh; }
 .modal-ph         { max-width: 500px; }
 .modal-alarm      { max-width: 420px; text-align: center; padding: 32px 24px; }
+.modal-cadastro   { max-width: 760px; }   /* cadastro de texto/tutorial maior */
 
 @keyframes slide-up { from { transform: translateY(16px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
@@ -496,7 +497,7 @@ mark { background: rgba(189,147,249,0.28); color: var(--cyan); border-radius: 2p
 .toolbar-sep { width: 1px; height: 18px; background: var(--border); margin: 0 4px; }
 .toolbar-hint { color: var(--text-muted); font-size: 11px; }
 .rich-editor {
-  width: 100%; min-height: 200px; padding: 12px 14px;
+  width: 100%; min-height: 320px; padding: 14px 16px;
   background: var(--bg-base); border: 1.5px solid var(--border); border-top: none;
   border-radius: 0 0 var(--radius-sm) var(--radius-sm); color: var(--text-primary);
   font-family: var(--font-ui); font-size: 14px; outline: none; overflow-y: auto; line-height: 1.65;
@@ -729,7 +730,7 @@ mark { background: rgba(189,147,249,0.28); color: var(--cyan); border-radius: 2p
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
     animation: slide-up-mobile 0.22s ease;
   }
-  .modal-large, .modal-fullscreen, .modal-ph, .modal-alarm { max-width: 100%; }
+  .modal-large, .modal-fullscreen, .modal-ph, .modal-alarm, .modal-cadastro { max-width: 100%; }
   .modal-fullscreen { max-height: 96vh; }
   @keyframes slide-up-mobile {
     from { transform: translateY(40px); opacity: 0; }
@@ -1000,3 +1001,23 @@ mark { background: rgba(189,147,249,0.28); color: var(--cyan); border-radius: 2p
    ═══════════════════════════════════════════════ */
 .btn-theme { padding: 6px 10px; }
 .btn-theme .icon { font-size: 15px; }
+
+/* ═══════════════════════════════════════════════
+   SELECT "BANCO DE DADOS" no header
+   ═══════════════════════════════════════════════ */
+.db-select {
+  padding: 6px 10px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all var(--transition);
+  outline: none;
+  max-width: 160px;
+}
+.db-select:hover { background: var(--bg-elevated); color: var(--text-primary); border-color: var(--text-muted); }
+.db-select:focus { border-color: var(--cyan); }
+.db-select option { background: var(--bg-surface); color: var(--text-primary); }

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SupportBase — Central de Conhecimento</title>
-  <link rel="stylesheet" href="style.css?v=9" />
+  <link rel="stylesheet" href="style.css?v=10" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 </head>
@@ -60,14 +60,18 @@
     <!-- DESKTOP NAV -->
     <nav class="header-actions desktop-nav">
       <button class="btn-ghost" id="btn-open-register"><span class="icon">＋</span> Cadastrar</button>
-      <button class="btn-ghost" id="btn-open-list"><span class="icon">☰</span> Lista</button>
       <button class="btn-ghost" id="btn-open-contatos"><span class="icon">📇</span> Contatos</button>
       <button class="btn-ghost" id="btn-open-links"><span class="icon">🔗</span> Links</button>
+      <button class="btn-ghost" id="btn-open-programas"><span class="icon">💿</span> Programas</button>
       <button class="btn-ghost btn-reminders" id="btn-open-reminders">
         🔔 Lembretes<span class="badge-count" id="reminder-badge" style="display:none"></span>
       </button>
-      <button class="btn-ghost" id="btn-backup"><span class="icon">⬇</span> Backup</button>
-      <button class="btn-ghost" id="btn-restore-trigger"><span class="icon">⬆</span> Restaurar</button>
+      <button class="btn-ghost" id="btn-open-list"><span class="icon">☰</span> Lista</button>
+      <select id="db-select" class="db-select" title="Banco de dados">
+        <option value="">🗄️ Banco de dados</option>
+        <option value="backup">⬇ Fazer Backup</option>
+        <option value="restore">⬆ Restaurar Backup</option>
+      </select>
       <input type="file" id="input-restore" accept=".json" style="display:none" />
       <span class="header-divider"></span>
       <span class="logged-user" id="logged-user-label">👤 …</span>
@@ -95,15 +99,16 @@
     </div>
     <div class="mobile-menu-items">
       <button class="mobile-menu-item" id="m-btn-register">＋ Cadastrar</button>
-      <button class="mobile-menu-item" id="m-btn-list">☰ Lista Completa</button>
       <button class="mobile-menu-item" id="m-btn-contatos">📇 Contatos</button>
       <button class="mobile-menu-item" id="m-btn-links">🔗 Links Úteis</button>
+      <button class="mobile-menu-item" id="m-btn-programas">💿 Programas</button>
       <button class="mobile-menu-item mobile-item-amber" id="m-btn-reminders">
         🔔 Lembretes <span class="badge-count" id="m-reminder-badge" style="display:none"></span>
       </button>
+      <button class="mobile-menu-item" id="m-btn-list">☰ Lista Completa</button>
       <div class="mobile-menu-divider"></div>
-      <button class="mobile-menu-item" id="m-btn-backup">⬇ Backup</button>
-      <button class="mobile-menu-item" id="m-btn-restore">⬆ Restaurar</button>
+      <button class="mobile-menu-item" id="m-btn-backup">⬇ Fazer Backup</button>
+      <button class="mobile-menu-item" id="m-btn-restore">⬆ Restaurar Backup</button>
       <button class="mobile-menu-item" id="m-btn-theme">🌙 Tema claro/escuro</button>
       <div class="mobile-menu-divider"></div>
       <button class="mobile-menu-item mobile-item-red" id="m-btn-logout">⏻ Sair</button>
@@ -160,7 +165,7 @@
 
 <!-- ═══════════ MODAL CADASTRO (Texto + Tutorial) ═══════════ -->
 <div class="modal-overlay" id="modal-register" style="display:none">
-  <div class="modal">
+  <div class="modal modal-cadastro">
     <div class="modal-header">
       <h2 class="modal-title" id="modal-title-text">Novo Cadastro</h2>
       <button class="modal-close" id="modal-close">✕</button>
@@ -185,7 +190,7 @@
       </div>
       <div class="form-group">
         <label>Descrição (texto a ser copiado) *</label>
-        <textarea id="texto-desc" rows="5" placeholder="Use {nome}, {chamado} para placeholders. {hoje}, {hora}, {amanha}, {pdata}, {datahoracompleta} são automáticos."></textarea>
+        <textarea id="texto-desc" rows="9" placeholder="Use {nome}, {chamado} para placeholders. {hoje}, {hora}, {amanha}, {pdata}, {datahoracompleta} são automáticos."></textarea>
       </div>
       <div class="form-actions">
         <button class="btn-secondary" id="btn-cancel-texto">Cancelar</button>
@@ -413,6 +418,54 @@
   </div>
 </div>
 
+<!-- ═══════════ MODAL PROGRAMAS ═══════════ -->
+<div class="modal-overlay" id="modal-programas" style="display:none">
+  <div class="modal modal-large">
+    <div class="modal-header">
+      <h2 class="modal-title">💿 Programas</h2>
+      <button class="modal-close" id="prog-modal-close">✕</button>
+    </div>
+    <div class="reminder-panel">
+      <div class="rem-form-wrap">
+        <div class="rem-form-title" id="prog-form-title">Novo programa</div>
+        <input type="hidden" id="prog-edit-id" />
+        <div class="form-group">
+          <label>Nome *</label>
+          <input type="text" id="prog-nome" placeholder="Nome do programa" />
+        </div>
+        <div class="form-group">
+          <label>Link do OneDrive</label>
+          <input type="url" id="prog-onedrive" placeholder="https://onedrive…" />
+        </div>
+        <div class="form-group">
+          <label>Manual de instalação</label>
+          <div class="editor-toolbar">
+            <button type="button" class="toolbar-btn" data-prog-cmd="bold"><b>B</b></button>
+            <button type="button" class="toolbar-btn" data-prog-cmd="italic"><i>I</i></button>
+            <button type="button" class="toolbar-btn" data-prog-cmd="insertUnorderedList">☰</button>
+            <button type="button" class="toolbar-btn" data-prog-cmd="insertOrderedList">⒈</button>
+            <button type="button" class="toolbar-btn" id="prog-btn-insert-image">🖼</button>
+            <span class="toolbar-sep"></span>
+            <small class="toolbar-hint">Cole imagens com Ctrl+V</small>
+          </div>
+          <div id="prog-manual" class="rich-editor" contenteditable="true" data-placeholder="Passo a passo da instalação. Cole imagens com Ctrl+V…"></div>
+        </div>
+        <div class="form-actions">
+          <button class="btn-secondary" id="prog-cancel">Cancelar</button>
+          <button class="btn-primary" id="prog-save">Salvar Programa</button>
+        </div>
+      </div>
+      <div class="rem-list-wrap">
+        <div class="rem-list-header">
+          <span class="panel-title">Programas cadastrados</span>
+          <input type="text" id="prog-search" class="cham-search-input" placeholder="Buscar…" style="margin-top:10px" />
+        </div>
+        <div id="prog-list" class="rem-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ═══════════ MODAL CONTATOS ═══════════ -->
 <div class="modal-overlay" id="modal-contatos" style="display:none">
   <div class="modal modal-large">
@@ -531,6 +584,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script src="firebase-config.js"></script>
-<script src="app.js?v=9"></script>
+<script src="app.js?v=10"></script>
 </body>
 </html>

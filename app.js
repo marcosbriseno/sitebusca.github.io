@@ -1,11 +1,11 @@
 /* ═══════════════════════════════════════════════
    SUPPORTBASE — app.js  (versão completa)
-   Textos · Tutoriais · Lembretes · Chamados · Lista
+   Textos · Tutoriais · Lembretes · Lista
    ═══════════════════════════════════════════════ */
 "use strict";
 
 /* ═══════════ ESTADO GLOBAL ═══════════ */
-let state = { textos: [], tutoriais: [], lembretes: [], chamados: [] };
+let state = { textos: [], tutoriais: [], lembretes: [], contatos: [], links: [] };
 let history   = [];
 let favorites = {};
 let activeType      = 'textos';
@@ -15,16 +15,33 @@ let currentTutorialId = null;
 let alarmTimers     = [];
 let activeListTab   = 'textos';
 let activeRemFilter = 'all';
-let activeChamFilter = 'all';
 
 /* ═══════════ FIREBASE ═══════════ */
+// ARQUITETURA DE DADOS (dois documentos):
+//  • COMPARTILHADO  → supportbase/equipe
+//       textos, tutoriais, favoritos, histórico
+//       (todos os usuários autorizados veem e editam os mesmos)
+//  • PRIVADO        → supportbase_privado/{uid}
+//       lembretes (cada usuário tem os seus + compartilhados)
+const SHARED_COLLECTION  = 'supportbase';
+const SHARED_DOC_ID      = 'equipe';
+const PRIVATE_COLLECTION = 'supportbase_privado';
+const USERS_COLLECTION   = 'usuarios';  // diretório de usuários (p/ compartilhar lembretes)
+
 let auth = null;
 let db   = null;
 let currentUser = null;
-let unsubscribeSnapshot = null;
-let saveDebounceTimer = null;
-let _lastSyncedJSON = null;   // evita re-render ao receber eco do próprio save
+let unsubShared  = null;   // listener do documento compartilhado
+let unsubPrivate = null;   // listener do documento privado
+let saveSharedTimer  = null;
+let savePrivateTimer = null;
+let _lastSharedJSON  = null;
+let _lastPrivateJSON = null;
+let _sharedLoaded  = false;
+let _privateLoaded = false;
 let _firstSnapshotLoaded = false;
+let usersDirectory = [];   // [{uid, email}] — outros usuários do sistema
+let _shareReminderId = null;
 
 /* ═══════════════════════════════════════════════
    INIT
@@ -41,18 +58,24 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   bindLoginEvents();
+  initTheme();
 
   auth.onAuthStateChanged(user => {
     if (user) {
       currentUser = user;
       qs('#logged-user-label').textContent = `👤 ${user.email}`;
     const mobileLabel=qs('#mobile-user-label'); if(mobileLabel) mobileLabel.textContent=`👤 ${user.email}`;
-      attachFirestoreListener(user.uid);
+      attachSharedListener();
+      attachPrivateListener(user.uid);
+      registerUserDirectory(user);
+      loadUsersDirectory();
       showApp();
     } else {
       currentUser = null;
-      detachFirestoreListener();
+      detachListeners();
       _firstSnapshotLoaded = false;
+      _sharedLoaded = false;
+      _privateLoaded = false;
       alarmTimers.forEach(clearTimeout);
       alarmTimers = [];
       showLogin();
@@ -148,7 +171,7 @@ function mapAuthError(code) {
 
 function doLogout() {
   if (!confirm('Deseja sair do sistema?')) return;
-  detachFirestoreListener();
+  detachListeners();
   auth.signOut();
   // o listener onAuthStateChanged cuida de mostrar a tela de login
   qs('#login-user').value = '';
@@ -157,50 +180,84 @@ function doLogout() {
 }
 
 /* ═══════════════════════════════════════════════
-   STORAGE — Firestore (sincroniza entre dispositivos)
+   STORAGE — Firestore (dois documentos)
+   • COMPARTILHADO: textos, tutoriais, favoritos, histórico
+   • PRIVADO:       lembretes (por usuário)
    ═══════════════════════════════════════════════ */
-function attachFirestoreListener(uid) {
-  const docRef = db.collection('supportbase').doc(uid);
-  unsubscribeSnapshot = docRef.onSnapshot(snap => {
+
+/* ---------- LISTENER COMPARTILHADO ---------- */
+function attachSharedListener() {
+  const docRef = db.collection(SHARED_COLLECTION).doc(SHARED_DOC_ID);
+  unsubShared = docRef.onSnapshot(snap => {
     if (snap.exists) {
       const data = snap.data();
       const incomingJSON = JSON.stringify(data);
-      if (incomingJSON === _lastSyncedJSON) {
-        // eco do nosso próprio save — apenas confirma sincronização
-        if (!_firstSnapshotLoaded) finishFirstLoad();
+      if (incomingJSON === _lastSharedJSON) {
+        markSharedLoaded();
         setSyncStatus('synced');
         return;
       }
-      _lastSyncedJSON = incomingJSON;
+      _lastSharedJSON = incomingJSON;
       state.textos    = data.textos    || [];
       state.tutoriais = data.tutoriais || [];
-      state.lembretes = data.lembretes || [];
-      state.chamados  = data.chamados  || [];
+      state.contatos  = data.contatos  || [];
+      state.links     = data.links     || [];
       history   = data.history   || [];
       favorites = data.favorites || {};
-
-      if (!_firstSnapshotLoaded) finishFirstLoad();
+      markSharedLoaded();
       refreshAllViews();
       setSyncStatus('synced');
     } else {
-      // primeiro acesso: cria o documento vazio
-      const empty = { textos:[], tutoriais:[], lembretes:[], chamados:[], history:[], favorites:{}, updatedAt: Date.now() };
-      _lastSyncedJSON = JSON.stringify(empty);
-      docRef.set(empty).then(() => {
-        if (!_firstSnapshotLoaded) finishFirstLoad();
-      });
+      const empty = { textos:[], tutoriais:[], contatos:[], links:[], history:[], favorites:{}, updatedAt: Date.now() };
+      _lastSharedJSON = JSON.stringify(empty);
+      docRef.set(empty).then(markSharedLoaded);
     }
   }, err => {
-    console.error('Erro Firestore:', err);
+    console.error('Erro Firestore (compartilhado):', err);
     setSyncStatus('error');
-    if (!_firstSnapshotLoaded) finishFirstLoad();
+    markSharedLoaded();
     toast('⚠️ Erro de sincronização. Verifique sua conexão.', 'error');
   });
 }
 
-function detachFirestoreListener() {
-  if (unsubscribeSnapshot) { unsubscribeSnapshot(); unsubscribeSnapshot = null; }
-  _lastSyncedJSON = null;
+/* ---------- LISTENER PRIVADO ---------- */
+function attachPrivateListener(uid) {
+  const docRef = db.collection(PRIVATE_COLLECTION).doc(uid);
+  unsubPrivate = docRef.onSnapshot(snap => {
+    if (snap.exists) {
+      const data = snap.data();
+      const incomingJSON = JSON.stringify(data);
+      if (incomingJSON === _lastPrivateJSON) {
+        markPrivateLoaded();
+        return;
+      }
+      _lastPrivateJSON = incomingJSON;
+      state.lembretes = data.lembretes || [];
+      markPrivateLoaded();
+      refreshAllViews();
+    } else {
+      const empty = { lembretes:[], updatedAt: Date.now() };
+      _lastPrivateJSON = JSON.stringify(empty);
+      docRef.set(empty).then(markPrivateLoaded);
+    }
+  }, err => {
+    console.error('Erro Firestore (privado):', err);
+    markPrivateLoaded();
+  });
+}
+
+function detachListeners() {
+  if (unsubShared)  { unsubShared();  unsubShared  = null; }
+  if (unsubPrivate) { unsubPrivate(); unsubPrivate = null; }
+  _lastSharedJSON = null; _lastPrivateJSON = null;
+}
+
+// só libera a tela quando AMBOS os documentos carregaram
+function markSharedLoaded()  { _sharedLoaded  = true; maybeFinishFirstLoad(); }
+function markPrivateLoaded() { _privateLoaded = true; maybeFinishFirstLoad(); }
+function maybeFinishFirstLoad() {
+  if (_firstSnapshotLoaded) return;
+  if (_sharedLoaded && _privateLoaded) finishFirstLoad();
 }
 
 function finishFirstLoad() {
@@ -217,8 +274,6 @@ function finishFirstLoad() {
   updateListCounts();
 }
 
-// re-renderiza tudo que depende de `state`/`history`/`favorites`
-// (chamado quando os dados mudam em OUTRO dispositivo)
 function refreshAllViews() {
   renderHistory();
   renderFavorites();
@@ -230,28 +285,44 @@ function refreshAllViews() {
   updateListCounts();
   if (qs('#search-input').value.trim()) doSearch();
   if (qs('#modal-reminders').style.display !== 'none') renderLembretes();
-  if (qs('#modal-chamados').style.display !== 'none') renderChamados();
   if (qs('#modal-list').style.display !== 'none') renderListContent();
 }
 
-// salva tudo (textos, tutoriais, lembretes, chamados, histórico, favoritos)
-// em UM único documento, com debounce para não gerar escritas excessivas
-function scheduleSave() {
+/* ---------- SALVAR ---------- */
+// Salva textos/tutoriais/favoritos/histórico no documento COMPARTILHADO
+function saveShared() {
   setSyncStatus('saving');
-  clearTimeout(saveDebounceTimer);
-  saveDebounceTimer = setTimeout(doSaveToFirestore, 600);
+  clearTimeout(saveSharedTimer);
+  saveSharedTimer = setTimeout(doSaveShared, 600);
 }
-function doSaveToFirestore() {
+function doSaveShared() {
   if (!currentUser || !db) return;
   const payload = {
     textos: state.textos, tutoriais: state.tutoriais,
-    lembretes: state.lembretes, chamados: state.chamados,
+    contatos: state.contatos, links: state.links,
     history, favorites, updatedAt: Date.now()
   };
-  _lastSyncedJSON = JSON.stringify(payload);
-  db.collection('supportbase').doc(currentUser.uid).set(payload)
+  _lastSharedJSON = JSON.stringify(payload);
+  db.collection(SHARED_COLLECTION).doc(SHARED_DOC_ID).set(payload)
     .then(() => setSyncStatus('synced'))
-    .catch(err => { console.error('Erro ao salvar:', err); setSyncStatus('error'); toast('⚠️ Erro ao salvar. Tentando novamente…','error'); });
+    .catch(err => { console.error('Erro ao salvar (compartilhado):', err); setSyncStatus('error'); toast('⚠️ Erro ao salvar.','error'); });
+}
+
+// Salva lembretes no documento PRIVADO do usuário
+function savePrivate() {
+  setSyncStatus('saving');
+  clearTimeout(savePrivateTimer);
+  savePrivateTimer = setTimeout(doSavePrivate, 600);
+}
+function doSavePrivate() {
+  if (!currentUser || !db) return;
+  const payload = {
+    lembretes: state.lembretes, updatedAt: Date.now()
+  };
+  _lastPrivateJSON = JSON.stringify(payload);
+  db.collection(PRIVATE_COLLECTION).doc(currentUser.uid).set(payload)
+    .then(() => setSyncStatus('synced'))
+    .catch(err => { console.error('Erro ao salvar (privado):', err); setSyncStatus('error'); toast('⚠️ Erro ao salvar.','error'); });
 }
 
 function setSyncStatus(status) {
@@ -264,9 +335,13 @@ function setSyncStatus(status) {
   });
 }
 
-function saveDB()      { scheduleSave(); }
-function saveHistory() { scheduleSave(); }
-function saveFavs()    { scheduleSave(); }
+// saveDB salva nos DOIS documentos (cada um pega só os campos que lhe
+// pertencem): compartilhado = textos/tutoriais/fav/histórico,
+// privado = lembretes. Assim qualquer alteração é persistida
+// no lugar certo sem precisar saber a origem da chamada.
+function saveDB()      { saveShared(); savePrivate(); }
+function saveHistory() { saveShared(); }
+function saveFavs()    { saveShared(); }
 
 /* ═══════════════════════════════════════════════
    BIND EVENTS — tudo em um lugar
@@ -283,8 +358,9 @@ function bindEvents() {
   const mobileMap = {
     'm-btn-register':  '#btn-open-register',
     'm-btn-list':      '#btn-open-list',
+    'm-btn-contatos':  '#btn-open-contatos',
+    'm-btn-links':     '#btn-open-links',
     'm-btn-reminders': '#btn-open-reminders',
-    'm-btn-chamados':  '#btn-open-chamados',
     'm-btn-backup':    '#btn-backup',
     'm-btn-logout':    '#btn-logout',
   };
@@ -391,6 +467,8 @@ function bindEvents() {
   qs('#modal-reminders').addEventListener('click', e => { if (e.target === qs('#modal-reminders')) hide(qs('#modal-reminders')); });
   qs('#rem-save').addEventListener('click', saveLembrete);
   qs('#rem-cancel').addEventListener('click', resetRemForm);
+  qs('#share-modal-close').addEventListener('click', closeShareModal);
+  qs('#modal-share').addEventListener('click', e => { if (e.target === qs('#modal-share')) closeShareModal(); });
   qsa('[data-rem-filter]').forEach(btn => {
     btn.addEventListener('click', () => {
       qsa('[data-rem-filter]').forEach(b => b.classList.remove('active'));
@@ -405,20 +483,6 @@ function bindEvents() {
   qs('#alarm-snooze').addEventListener('click', snoozeAlarm);
 
   /* ── CHAMADOS ── */
-  qs('#btn-open-chamados').addEventListener('click', openChamadosModal);
-  qs('#cham-modal-close').addEventListener('click', () => hide(qs('#modal-chamados')));
-  qs('#modal-chamados').addEventListener('click', e => { if (e.target === qs('#modal-chamados')) hide(qs('#modal-chamados')); });
-  qs('#cham-save').addEventListener('click', saveChamado);
-  qs('#cham-cancel').addEventListener('click', resetChamForm);
-  qs('#cham-search').addEventListener('input', renderChamados);
-  qsa('[data-cham-filter]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      qsa('[data-cham-filter]').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      activeChamFilter = btn.dataset.chamFilter;
-      renderChamados();
-    });
-  });
 
   /* ── LISTA COMPLETA ── */
   qs('#btn-open-list').addEventListener('click', openListModal);
@@ -434,13 +498,32 @@ function bindEvents() {
   });
   qs('#list-search').addEventListener('input', renderListContent);
 
+  /* ── CONTATOS ── */
+  qs('#btn-open-contatos').addEventListener('click', openContatosModal);
+  qs('#contato-modal-close').addEventListener('click', () => hide(qs('#modal-contatos')));
+  qs('#modal-contatos').addEventListener('click', e => { if (e.target === qs('#modal-contatos')) hide(qs('#modal-contatos')); });
+  qs('#contato-save').addEventListener('click', saveContato);
+  qs('#contato-cancel').addEventListener('click', resetContatoForm);
+  qs('#contato-search').addEventListener('input', renderContatos);
+
+  /* ── LINKS ── */
+  qs('#btn-open-links').addEventListener('click', openLinksModal);
+  qs('#link-modal-close').addEventListener('click', () => hide(qs('#modal-links')));
+  qs('#modal-links').addEventListener('click', e => { if (e.target === qs('#modal-links')) hide(qs('#modal-links')); });
+  qs('#link-save').addEventListener('click', saveLink);
+  qs('#link-cancel').addEventListener('click', resetLinkForm);
+  qs('#link-search').addEventListener('input', renderLinks);
+
+  /* ── TEMA ── */
+  qs('#btn-theme').addEventListener('click', toggleTheme);
+  qs('#m-btn-theme').addEventListener('click', () => { closeMobileMenu(); toggleTheme(); });
+
   /* ── TECLADO GLOBAL ── */
   document.addEventListener('keydown', e => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); focusSearch(); }
     if (e.key === 'Escape') {
       hide(qs('#modal-list'));
       hide(qs('#modal-reminders'));
-      hide(qs('#modal-chamados'));
     }
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       const cards = qsa('.result-card');
@@ -906,6 +989,97 @@ function finalizeCopy(id, text) {
 }
 
 /* ═══════════════════════════════════════════════
+   DIRETÓRIO DE USUÁRIOS + COMPARTILHAMENTO
+   ═══════════════════════════════════════════════ */
+
+// Registra (ou atualiza) o usuário atual no diretório, para que outros
+// possam escolhê-lo como destinatário de um lembrete compartilhado.
+function registerUserDirectory(user) {
+  if (!db || !user) return;
+  db.collection(USERS_COLLECTION).doc(user.uid).set({
+    uid: user.uid,
+    email: user.email,
+    lastSeen: Date.now()
+  }, { merge: true }).catch(err => console.warn('Não foi possível registrar no diretório:', err));
+}
+
+// Carrega a lista de usuários (exceto eu mesmo) para o seletor de compartilhamento.
+function loadUsersDirectory() {
+  if (!db) return;
+  db.collection(USERS_COLLECTION).get().then(snap => {
+    usersDirectory = [];
+    snap.forEach(doc => {
+      const d = doc.data();
+      if (d.uid && d.uid !== currentUser?.uid) usersDirectory.push({ uid: d.uid, email: d.email });
+    });
+  }).catch(err => console.warn('Não foi possível carregar usuários:', err));
+}
+
+// Abre o modal de compartilhamento para um lembrete específico.
+function openShareModal(reminderId) {
+  _shareReminderId = reminderId;
+  const l = state.lembretes.find(x => x.id === reminderId);
+  if (!l) return;
+
+  qs('#share-reminder-title').textContent = l.title;
+
+  const listEl = qs('#share-user-list');
+  if (!usersDirectory.length) {
+    listEl.innerHTML = '<div class="empty-state" style="padding:16px">Nenhum outro usuário encontrado. Peça para a outra pessoa fazer login ao menos uma vez no sistema.</div>';
+  } else {
+    listEl.innerHTML = usersDirectory.map(u => `
+      <button class="share-user-btn" data-uid="${escHtml(u.uid)}" data-email="${escHtml(u.email)}">
+        <span class="share-user-avatar">👤</span>
+        <span class="share-user-email">${escHtml(u.email)}</span>
+        <span class="share-user-arrow">→</span>
+      </button>
+    `).join('');
+    qsa('.share-user-btn').forEach(btn => {
+      btn.addEventListener('click', () => shareReminderWith(btn.dataset.uid, btn.dataset.email));
+    });
+  }
+  show(qs('#modal-share'));
+}
+
+function closeShareModal() {
+  hide(qs('#modal-share'));
+  _shareReminderId = null;
+}
+
+// Compartilha = cria uma CÓPIA do lembrete no documento privado do destinatário.
+// Cada um passa a ter sua própria versão independente.
+function shareReminderWith(targetUid, targetEmail) {
+  const original = state.lembretes.find(x => x.id === _shareReminderId);
+  if (!original || !db) return;
+
+  const docRef = db.collection(PRIVATE_COLLECTION).doc(targetUid);
+
+  // Lê o documento privado do destinatário, adiciona o lembrete copiado e salva.
+  docRef.get().then(snap => {
+    const data = snap.exists ? snap.data() : { lembretes: [] };
+    const lembretesDest = data.lembretes || [];
+
+    // cópia com novo id, marcada como recebida e de quem veio
+    const copia = {
+      ...original,
+      id: uid(),
+      done: false,
+      sharedBy: currentUser.email,
+      receivedAt: Date.now()
+    };
+    lembretesDest.push(copia);
+
+    return docRef.set({ ...data, lembretes: lembretesDest, updatedAt: Date.now() }, { merge: true });
+  }).then(() => {
+    closeShareModal();
+    toast(`📤 Lembrete enviado para ${targetEmail}!`, 'success');
+  }).catch(err => {
+    console.error('Erro ao compartilhar:', err);
+    toast('⚠️ Não foi possível compartilhar. Verifique as permissões.', 'error');
+  });
+}
+
+/* ═══════════════════════════════════════════════
    LEMBRETES
    ═══════════════════════════════════════════════ */
 function openRemindersModal() {
@@ -974,6 +1148,7 @@ function renderLembretes() {
       <div class="rem-card-top">
         <div class="rem-card-title">${l.done?'✓ ':''}${escHtml(l.title)}</div>
         <div class="rem-card-actions">
+          <button class="action-btn rem-btn-share" title="Compartilhar com outro usuário">📤</button>
           <button class="action-btn rem-btn-done" title="${l.done?'Reabrir':'Concluir'}">${l.done?'↩':'✓'}</button>
           <button class="action-btn rem-btn-edit" title="Editar">✏️</button>
           <button class="action-btn btn-delete delete-btn rem-btn-del" title="Deletar">🗑</button>
@@ -986,6 +1161,7 @@ function renderLembretes() {
         ${recLabel ? `<span class="rem-meta-pill">${recLabel}</span>` : ''}
         ${l.alarm ? `<span class="rem-meta-pill">🔔</span>` : ''}
         ${isOverdue ? `<span class="rem-meta-pill" style="color:var(--red)">⚠️ Vencido</span>` : ''}
+        ${l.sharedBy ? `<span class="rem-meta-pill" style="color:var(--violet)">📥 de ${escHtml(l.sharedBy)}</span>` : ''}
       </div>
     </div>`;
   }).join('');
@@ -1023,6 +1199,12 @@ function renderLembretes() {
       state.lembretes=state.lembretes.filter(x=>x.id!==id);
       saveDB(); renderLembretes(); scheduleAllAlarms(); updateBadges(); updateListCounts();
       toast('🗑 Lembrete removido','info');
+    });
+  });
+  qsa('.rem-btn-share').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const id=btn.closest('.rem-card').dataset.id;
+      openShareModal(id);
     });
   });
 }
@@ -1102,102 +1284,6 @@ function requestNotificationPermission() {
 }
 
 /* ═══════════════════════════════════════════════
-   CHAMADOS
-   ═══════════════════════════════════════════════ */
-function openChamadosModal() {
-  resetChamForm();
-  renderChamados();
-  show(qs('#modal-chamados'));
-}
-
-function saveChamado() {
-  const nome=qs('#cham-nome').value.trim(), mat=qs('#cham-matricula').value.trim(), desc=qs('#cham-desc').value.trim();
-  if (!nome||!mat||!desc) { toast('Preencha nome, matrícula e descrição','warn'); return; }
-  const editId=qs('#cham-edit-id').value;
-  const now=nowBrasilia();
-  const item = {
-    nome, matricula:mat, status:qs('#cham-status').value, priority:qs('#cham-priority').value,
-    description:desc, solucao:qs('#cham-solucao').value.trim(), updatedAt:Date.now(),
-  };
-  if (editId) {
-    const idx=state.chamados.findIndex(c=>c.id===editId);
-    if (idx>-1) state.chamados[idx]={...state.chamados[idx],...item};
-    toast('✅ Chamado atualizado!','success');
-  } else {
-    state.chamados.push({ id:uid(), createdAt:Date.now(), ...item });
-    toast('✅ Chamado registrado!','success');
-  }
-  saveDB(); resetChamForm(); renderChamados(); updateBadges(); updateListCounts();
-}
-
-function resetChamForm() {
-  qs('#cham-edit-id').value=''; qs('#cham-form-title').textContent='Novo chamado';
-  ['cham-nome','cham-matricula','cham-desc','cham-solucao'].forEach(id=>{ const el=qs(`#${id}`); if(el) el.value=''; });
-  qs('#cham-status').value='aberto'; qs('#cham-priority').value='media';
-}
-
-function renderChamados() {
-  const list=qs('#cham-list');
-  const query=(qs('#cham-search').value||'').trim().toLowerCase();
-  let items=[...state.chamados].sort((a,b)=>b.createdAt-a.createdAt);
-
-  if (activeChamFilter!=='all') items=items.filter(c=>c.status===activeChamFilter);
-  if (query) items=items.filter(c=>(c.nome+c.matricula+c.description).toLowerCase().includes(query));
-
-  if (!items.length) { list.innerHTML='<div class="empty-state" style="padding:20px">Nenhum chamado.</div>'; return; }
-
-  const statusLabel={aberto:'🔵 Aberto',andamento:'🟡 Em andamento',resolvido:'🟢 Resolvido',cancelado:'⚫ Cancelado'};
-  const prioLabel={baixa:'🟢 Baixa',media:'🟡 Média',alta:'🟠 Alta',urgente:'🔴 Urgente'};
-  list.innerHTML=items.map(c=>{
-    const dt=new Date(c.createdAt);
-    return `<div class="cham-card status-${c.status}" data-id="${c.id}">
-      <div class="cham-card-top">
-        <div>
-          <div class="cham-card-name">👤 ${escHtml(c.nome)}</div>
-        </div>
-        <div class="cham-card-actions">
-          <button class="action-btn cham-btn-edit" title="Editar">✏️</button>
-          <button class="action-btn btn-delete delete-btn cham-btn-del" title="Deletar">🗑</button>
-        </div>
-      </div>
-      <div class="cham-card-meta">
-        <span class="badge badge-status-${c.status}">${statusLabel[c.status]||c.status}</span>
-        <span class="badge badge-cat">🪪 ${escHtml(c.matricula)}</span>
-        <span class="badge badge-cat">${prioLabel[c.priority]||''}</span>
-        <span class="badge badge-cat" style="font-size:10px;color:var(--text-muted)">📅 ${fmtDate(dt)} ${fmtTime(dt)}</span>
-      </div>
-      <div class="cham-card-desc">${escHtml(truncate(c.description,180))}</div>
-      ${c.solucao ? `<div class="cham-card-solucao">✅ ${escHtml(c.solucao)}</div>` : ''}
-    </div>`;
-  }).join('');
-
-  qsa('.cham-btn-edit').forEach(btn=>{
-    btn.addEventListener('click',()=>{
-      const id=btn.closest('.cham-card').dataset.id;
-      const c=state.chamados.find(x=>x.id===id); if(!c) return;
-      qs('#cham-edit-id').value=id;
-      qs('#cham-form-title').textContent='Editar chamado';
-      qs('#cham-nome').value=c.nome;
-      qs('#cham-matricula').value=c.matricula;
-      qs('#cham-status').value=c.status;
-      qs('#cham-priority').value=c.priority;
-      qs('#cham-desc').value=c.description;
-      qs('#cham-solucao').value=c.solucao||'';
-      qs('#cham-nome').scrollIntoView({behavior:'smooth'});
-    });
-  });
-  qsa('.cham-btn-del').forEach(btn=>{
-    btn.addEventListener('click',()=>{
-      const id=btn.closest('.cham-card').dataset.id;
-      if (!confirm('Excluir chamado?')) return;
-      state.chamados=state.chamados.filter(x=>x.id!==id);
-      saveDB(); renderChamados(); updateBadges(); updateListCounts();
-      toast('🗑 Chamado removido','info');
-    });
-  });
-}
-
-/* ═══════════════════════════════════════════════
    LISTA COMPLETA
    ═══════════════════════════════════════════════ */
 function openListModal() {
@@ -1210,7 +1296,6 @@ function updateListCounts() {
   qs('#lt-count-textos').textContent=state.textos.length;
   qs('#lt-count-tutoriais').textContent=state.tutoriais.length;
   qs('#lt-count-lembretes').textContent=state.lembretes.length;
-  qs('#lt-count-chamados').textContent=state.chamados.length;
 }
 
 function renderListContent() {
@@ -1277,30 +1362,6 @@ function renderListContent() {
       }).join('')}</tbody>
     </table>`;
   }
-  else if (activeListTab==='chamados') {
-    let items=[...state.chamados].sort((a,b)=>b.createdAt-a.createdAt)
-      .filter(c=>!q || (c.nome+c.matricula+c.description).toLowerCase().includes(q));
-    if (!items.length) { container.innerHTML=`<div class="list-empty">Nenhum chamado.</div>`; return; }
-    const statusLabel={aberto:'🔵 Aberto',andamento:'🟡 Em andamento',resolvido:'🟢 Resolvido',cancelado:'⚫ Cancelado'};
-    container.innerHTML=`<table class="list-table">
-      <thead><tr><th>Nome</th><th>Matrícula</th><th>Descrição</th><th>Status</th><th>Data</th><th></th></tr></thead>
-      <tbody>${items.map(c=>{
-        const dt=new Date(c.createdAt);
-        return `<tr data-id="${c.id}">
-          <td class="td-title">${escHtml(c.nome)}</td>
-          <td>${escHtml(c.matricula)}</td>
-          <td>${escHtml(truncate(c.description,80))}</td>
-          <td>${statusLabel[c.status]||c.status}</td>
-          <td style="white-space:nowrap">${fmtDate(dt)} ${fmtTime(dt)}</td>
-          <td class="td-actions">
-            <button class="action-btn lt-cham-edit">✏️</button>
-            <button class="action-btn btn-delete lt-cham-del">🗑</button>
-          </td>
-        </tr>`;
-      }).join('')}</tbody>
-    </table>`;
-  }
-
   /* bind list actions */
   qsa('.lt-view').forEach(btn=>{
     const id=btn.closest('tr').dataset.id;
@@ -1322,14 +1383,6 @@ function renderListContent() {
     const id=btn.closest('tr').dataset.id;
     btn.addEventListener('click',()=>{ if(!confirm('Excluir lembrete?')) return; state.lembretes=state.lembretes.filter(x=>x.id!==id); saveDB(); updateBadges(); renderListContent(); updateListCounts(); toast('🗑 Lembrete removido','info'); });
   });
-  qsa('.lt-cham-edit').forEach(btn=>{
-    const id=btn.closest('tr').dataset.id;
-    btn.addEventListener('click',()=>{ hide(qs('#modal-list')); openChamadosModal(); setTimeout(()=>{ const c=state.chamados.find(x=>x.id===id); if(!c) return; qs('#cham-edit-id').value=id; qs('#cham-form-title').textContent='Editar chamado'; qs('#cham-nome').value=c.nome; qs('#cham-matricula').value=c.matricula; qs('#cham-status').value=c.status; qs('#cham-priority').value=c.priority; qs('#cham-desc').value=c.description; qs('#cham-solucao').value=c.solucao||''; },200); });
-  });
-  qsa('.lt-cham-del').forEach(btn=>{
-    const id=btn.closest('tr').dataset.id;
-    btn.addEventListener('click',()=>{ if(!confirm('Excluir chamado?')) return; state.chamados=state.chamados.filter(x=>x.id!==id); saveDB(); updateBadges(); renderListContent(); updateListCounts(); toast('🗑 Chamado removido','info'); });
-  });
 }
 
 /* ═══════════════════════════════════════════════
@@ -1340,9 +1393,6 @@ function updateBadges() {
   const badge=qs('#reminder-badge');
   if (pending>0) { badge.textContent=pending; show(badge); } else hide(badge);
 
-  const openCham=state.chamados.filter(c=>c.status==='aberto'||c.status==='andamento').length;
-  const cbadge=qs('#chamados-badge');
-  if (openCham>0) { cbadge.textContent=openCham; show(cbadge); } else hide(cbadge);
   updateMobileBadges();
   renderPostIts();
 }
@@ -1351,7 +1401,7 @@ function updateBadges() {
    BACKUP / RESTORE
    ═══════════════════════════════════════════════ */
 function doBackup() {
-  const data={ version:2, exportedAt:new Date().toISOString(), textos:state.textos, tutoriais:state.tutoriais, lembretes:state.lembretes, chamados:state.chamados, favorites, history };
+  const data={ version:4, exportedAt:new Date().toISOString(), textos:state.textos, tutoriais:state.tutoriais, lembretes:state.lembretes, contatos:state.contatos, links:state.links, favorites, history };
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob), a=document.createElement('a');
   a.href=url; a.download=`supportbase_backup_${dateStr()}.json`; a.click(); URL.revokeObjectURL(url);
@@ -1368,7 +1418,8 @@ function doRestore(file) {
       state.textos    = data.textos    || [];
       state.tutoriais = data.tutoriais || [];
       state.lembretes = data.lembretes || [];
-      state.chamados  = data.chamados  || [];
+      state.contatos  = data.contatos  || [];
+      state.links     = data.links     || [];
       favorites=data.favorites||{}; history=data.history||[];
       saveDB(); saveFavs(); saveHistory();
       renderHistory(); renderFavorites(); renderCategoryChips(); updateBadges(); updateListCounts(); scheduleAllAlarms();
@@ -1434,13 +1485,11 @@ function closeMobileMenu() {
 // Sincronizar badge mobile com desktop
 function updateMobileBadges() {
   const remPending = state.lembretes.filter(l=>!l.done).length;
-  const chamOpen   = state.chamados.filter(c=>c.status==='aberto'||c.status==='andamento').length;
-  const total = remPending + chamOpen;
+  const total = remPending;
   const mb = qs('#mobile-badge-count');
   if (mb) { mb.textContent=total; mb.style.display=total>0?'block':'none'; }
   // badges dentro do menu
   const mrb=qs('#m-reminder-badge'); if(mrb){ mrb.textContent=remPending; mrb.style.display=remPending>0?'inline':'none'; }
-  const mcb=qs('#m-chamados-badge'); if(mcb){ mcb.textContent=chamOpen; mcb.style.display=chamOpen>0?'inline':'none'; }
   // sync status mobile
   const smob=qs('#sync-status-mobile');
   const sm2=qs('#sync-status-m2');
@@ -1537,6 +1586,185 @@ function renderPostIts() {
       toast('✓ Lembrete concluído!','success');
     });
   });
+}
+
+/* ═══════════════════════════════════════════════
+   CONTATOS (compartilhado)
+   ═══════════════════════════════════════════════ */
+function openContatosModal() {
+  resetContatoForm();
+  renderContatos();
+  show(qs('#modal-contatos'));
+}
+function saveContato() {
+  const nome=qs('#contato-nome').value.trim();
+  if (!nome) { toast('Preencha o nome','warn'); return; }
+  const editId=qs('#contato-edit-id').value;
+  const item = {
+    nome,
+    telefone: qs('#contato-telefone').value.trim(),
+    teams:    qs('#contato-teams').value.trim(),
+    updatedAt: Date.now()
+  };
+  if (editId) {
+    const idx=state.contatos.findIndex(c=>c.id===editId);
+    if (idx>-1) state.contatos[idx]={...state.contatos[idx],...item};
+    toast('✅ Contato atualizado!','success');
+  } else {
+    state.contatos.push({ id:uid(), createdAt:Date.now(), ...item });
+    toast('✅ Contato cadastrado!','success');
+  }
+  saveDB(); resetContatoForm(); renderContatos(); updateListCounts();
+}
+function resetContatoForm() {
+  qs('#contato-edit-id').value=''; qs('#contato-form-title').textContent='Novo contato';
+  ['contato-nome','contato-telefone','contato-teams'].forEach(id=>{ const el=qs(`#${id}`); if(el) el.value=''; });
+}
+function renderContatos() {
+  const list=qs('#contato-list');
+  const query=(qs('#contato-search').value||'').trim().toLowerCase();
+  let items=[...state.contatos].sort((a,b)=>(a.nome||'').localeCompare(b.nome||''));
+  if (query) items=items.filter(c=>(c.nome+(c.telefone||'')+(c.teams||'')).toLowerCase().includes(query));
+  if (!items.length) { list.innerHTML='<div class="empty-state" style="padding:20px">Nenhum contato.</div>'; return; }
+
+  list.innerHTML=items.map(c=>`
+    <div class="rem-card" data-id="${c.id}" style="border-left-color:var(--cyan)">
+      <div class="rem-card-top">
+        <div class="rem-card-title">👤 ${escHtml(c.nome)}</div>
+        <div class="rem-card-actions">
+          <button class="action-btn contato-btn-edit" title="Editar">✏️</button>
+          <button class="action-btn btn-delete delete-btn contato-btn-del" title="Deletar">🗑</button>
+        </div>
+      </div>
+      <div class="rem-card-meta">
+        ${c.telefone ? `<span class="rem-meta-pill">📞 <a href="tel:${escHtml(c.telefone.replace(/[^0-9+]/g,''))}" style="color:var(--cyan)">${escHtml(c.telefone)}</a></span>` : ''}
+        ${c.teams ? `<span class="rem-meta-pill">💬 <a href="https://teams.microsoft.com/l/chat/0/0?users=${encodeURIComponent(c.teams)}" target="_blank" style="color:var(--violet)">${escHtml(c.teams)}</a></span>` : ''}
+      </div>
+    </div>
+  `).join('');
+
+  qsa('.contato-btn-edit').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const id=btn.closest('.rem-card').dataset.id;
+      const c=state.contatos.find(x=>x.id===id); if(!c) return;
+      qs('#contato-edit-id').value=id;
+      qs('#contato-form-title').textContent='Editar contato';
+      qs('#contato-nome').value=c.nome;
+      qs('#contato-telefone').value=c.telefone||'';
+      qs('#contato-teams').value=c.teams||'';
+      qs('#contato-nome').scrollIntoView({behavior:'smooth'});
+    });
+  });
+  qsa('.contato-btn-del').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const id=btn.closest('.rem-card').dataset.id;
+      if (!confirm('Excluir contato?')) return;
+      state.contatos=state.contatos.filter(x=>x.id!==id);
+      saveDB(); renderContatos(); updateListCounts();
+      toast('🗑 Contato removido','info');
+    });
+  });
+}
+
+/* ═══════════════════════════════════════════════
+   LINKS ÚTEIS (compartilhado)
+   ═══════════════════════════════════════════════ */
+function openLinksModal() {
+  resetLinkForm();
+  renderLinks();
+  show(qs('#modal-links'));
+}
+function saveLink() {
+  const url=qs('#link-url').value.trim(), desc=qs('#link-desc').value.trim();
+  if (!url||!desc) { toast('Preencha link e descrição','warn'); return; }
+  const editId=qs('#link-edit-id').value;
+  const item = { url, desc, updatedAt: Date.now() };
+  if (editId) {
+    const idx=state.links.findIndex(l=>l.id===editId);
+    if (idx>-1) state.links[idx]={...state.links[idx],...item};
+    toast('✅ Link atualizado!','success');
+  } else {
+    state.links.push({ id:uid(), createdAt:Date.now(), ...item });
+    toast('✅ Link cadastrado!','success');
+  }
+  saveDB(); resetLinkForm(); renderLinks(); updateListCounts();
+}
+function resetLinkForm() {
+  qs('#link-edit-id').value=''; qs('#link-form-title').textContent='Novo link';
+  qs('#link-url').value=''; qs('#link-desc').value='';
+}
+function renderLinks() {
+  const list=qs('#link-list');
+  const query=(qs('#link-search').value||'').trim().toLowerCase();
+  let items=[...state.links].sort((a,b)=>(a.desc||'').localeCompare(b.desc||''));
+  if (query) items=items.filter(l=>(l.desc+l.url).toLowerCase().includes(query));
+  if (!items.length) { list.innerHTML='<div class="empty-state" style="padding:20px">Nenhum link.</div>'; return; }
+
+  list.innerHTML=items.map(l=>`
+    <div class="rem-card" data-id="${l.id}" style="border-left-color:var(--green)">
+      <div class="rem-card-top">
+        <div class="rem-card-title">🔗 ${escHtml(l.desc)}</div>
+        <div class="rem-card-actions">
+          <button class="action-btn link-btn-open" title="Abrir">↗</button>
+          <button class="action-btn link-btn-edit" title="Editar">✏️</button>
+          <button class="action-btn btn-delete delete-btn link-btn-del" title="Deletar">🗑</button>
+        </div>
+      </div>
+      <div class="rem-card-meta">
+        <span class="rem-meta-pill"><a href="${escHtml(l.url)}" target="_blank" style="color:var(--cyan);word-break:break-all">${escHtml(truncate(l.url,60))}</a></span>
+      </div>
+    </div>
+  `).join('');
+
+  qsa('.link-btn-open').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const id=btn.closest('.rem-card').dataset.id;
+      const l=state.links.find(x=>x.id===id); if(!l) return;
+      window.open(l.url,'_blank','noopener');
+    });
+  });
+  qsa('.link-btn-edit').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const id=btn.closest('.rem-card').dataset.id;
+      const l=state.links.find(x=>x.id===id); if(!l) return;
+      qs('#link-edit-id').value=id;
+      qs('#link-form-title').textContent='Editar link';
+      qs('#link-url').value=l.url;
+      qs('#link-desc').value=l.desc;
+      qs('#link-url').scrollIntoView({behavior:'smooth'});
+    });
+  });
+  qsa('.link-btn-del').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const id=btn.closest('.rem-card').dataset.id;
+      if (!confirm('Excluir link?')) return;
+      state.links=state.links.filter(x=>x.id!==id);
+      saveDB(); renderLinks(); updateListCounts();
+      toast('🗑 Link removido','info');
+    });
+  });
+}
+
+/* ═══════════════════════════════════════════════
+   TEMA CLARO / ESCURO
+   ═══════════════════════════════════════════════ */
+const THEME_KEY = 'supportbase_theme';
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  // atualiza ícones dos botões
+  const icon = theme === 'light' ? '☀️' : '🌙';
+  const dt = qs('#btn-theme'); if (dt) dt.querySelector('.icon').textContent = icon;
+  const mt = qs('#m-btn-theme'); if (mt) mt.textContent = `${icon} Tema claro/escuro`;
+  try { localStorage.setItem(THEME_KEY, theme); } catch(e){}
+}
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme') || 'dark';
+  applyTheme(current === 'dark' ? 'light' : 'dark');
+}
+function initTheme() {
+  let saved = 'dark';
+  try { saved = localStorage.getItem(THEME_KEY) || 'dark'; } catch(e){}
+  applyTheme(saved);
 }
 
 /* ═══════════════════════════════════════════════

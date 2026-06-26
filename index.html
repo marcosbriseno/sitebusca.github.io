@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SupportBase — Central de Conhecimento</title>
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css?v=9" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 </head>
@@ -61,11 +61,10 @@
     <nav class="header-actions desktop-nav">
       <button class="btn-ghost" id="btn-open-register"><span class="icon">＋</span> Cadastrar</button>
       <button class="btn-ghost" id="btn-open-list"><span class="icon">☰</span> Lista</button>
+      <button class="btn-ghost" id="btn-open-contatos"><span class="icon">📇</span> Contatos</button>
+      <button class="btn-ghost" id="btn-open-links"><span class="icon">🔗</span> Links</button>
       <button class="btn-ghost btn-reminders" id="btn-open-reminders">
         🔔 Lembretes<span class="badge-count" id="reminder-badge" style="display:none"></span>
-      </button>
-      <button class="btn-ghost btn-chamados" id="btn-open-chamados">
-        📋 Chamados<span class="badge-count" id="chamados-badge" style="display:none"></span>
       </button>
       <button class="btn-ghost" id="btn-backup"><span class="icon">⬇</span> Backup</button>
       <button class="btn-ghost" id="btn-restore-trigger"><span class="icon">⬆</span> Restaurar</button>
@@ -73,6 +72,7 @@
       <span class="header-divider"></span>
       <span class="logged-user" id="logged-user-label">👤 …</span>
       <span class="sync-status" id="sync-status" title="Sincronização">☁️</span>
+      <button class="btn-ghost btn-theme" id="btn-theme" title="Alternar tema claro/escuro"><span class="icon">🌙</span></button>
       <button class="btn-ghost btn-logout" id="btn-logout"><span class="icon">⏻</span> Sair</button>
     </nav>
 
@@ -96,15 +96,15 @@
     <div class="mobile-menu-items">
       <button class="mobile-menu-item" id="m-btn-register">＋ Cadastrar</button>
       <button class="mobile-menu-item" id="m-btn-list">☰ Lista Completa</button>
+      <button class="mobile-menu-item" id="m-btn-contatos">📇 Contatos</button>
+      <button class="mobile-menu-item" id="m-btn-links">🔗 Links Úteis</button>
       <button class="mobile-menu-item mobile-item-amber" id="m-btn-reminders">
         🔔 Lembretes <span class="badge-count" id="m-reminder-badge" style="display:none"></span>
-      </button>
-      <button class="mobile-menu-item mobile-item-cyan" id="m-btn-chamados">
-        📋 Chamados <span class="badge-count" id="m-chamados-badge" style="display:none"></span>
       </button>
       <div class="mobile-menu-divider"></div>
       <button class="mobile-menu-item" id="m-btn-backup">⬇ Backup</button>
       <button class="mobile-menu-item" id="m-btn-restore">⬆ Restaurar</button>
+      <button class="mobile-menu-item" id="m-btn-theme">🌙 Tema claro/escuro</button>
       <div class="mobile-menu-divider"></div>
       <button class="mobile-menu-item mobile-item-red" id="m-btn-logout">⏻ Sair</button>
     </div>
@@ -392,79 +392,6 @@
   </div>
 </div>
 
-<!-- ═══════════ MODAL CHAMADOS ═══════════ -->
-<div class="modal-overlay" id="modal-chamados" style="display:none">
-  <div class="modal modal-large">
-    <div class="modal-header">
-      <h2 class="modal-title">📋 Chamados</h2>
-      <button class="modal-close" id="cham-modal-close">✕</button>
-    </div>
-    <div class="chamados-panel">
-      <!-- FORM NOVO -->
-      <div class="cham-form-wrap" id="cham-form-wrap">
-        <div class="rem-form-title" id="cham-form-title">Novo chamado</div>
-        <input type="hidden" id="cham-edit-id" />
-        <div class="rem-form-grid">
-          <div class="form-group">
-            <label>Nome *</label>
-            <input type="text" id="cham-nome" placeholder="Nome do solicitante" />
-          </div>
-          <div class="form-group">
-            <label>Matrícula *</label>
-            <input type="text" id="cham-matricula" placeholder="Ex: 123456" />
-          </div>
-          <div class="form-group">
-            <label>Status</label>
-            <select id="cham-status">
-              <option value="aberto">🔵 Aberto</option>
-              <option value="andamento">🟡 Em andamento</option>
-              <option value="resolvido">🟢 Resolvido</option>
-              <option value="cancelado">⚫ Cancelado</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Prioridade</label>
-            <select id="cham-priority">
-              <option value="baixa">🟢 Baixa</option>
-              <option value="media" selected>🟡 Média</option>
-              <option value="alta">🟠 Alta</option>
-              <option value="urgente">🔴 Urgente</option>
-            </select>
-          </div>
-          <div class="form-group" style="grid-column:1/-1">
-            <label>Descrição do problema *</label>
-            <textarea id="cham-desc" rows="3" placeholder="Descreva o problema relatado pelo usuário…"></textarea>
-          </div>
-          <div class="form-group" style="grid-column:1/-1">
-            <label>Solução / Observações</label>
-            <textarea id="cham-solucao" rows="2" placeholder="Registre a solução aplicada ou observações relevantes…"></textarea>
-          </div>
-        </div>
-        <div class="form-actions">
-          <button class="btn-secondary" id="cham-cancel">Cancelar</button>
-          <button class="btn-primary" id="cham-save">Salvar Chamado</button>
-        </div>
-      </div>
-      <!-- BARRA PESQUISA + FILTROS CHAMADOS -->
-      <div class="cham-list-wrap">
-        <div class="cham-list-header">
-          <span class="panel-title">Chamados registrados</span>
-          <div class="cham-controls">
-            <input type="text" id="cham-search" class="cham-search-input" placeholder="Buscar por nome ou matrícula…" />
-            <div class="rem-filter-row">
-              <button class="chip active" data-cham-filter="all">Todos</button>
-              <button class="chip" data-cham-filter="aberto">Abertos</button>
-              <button class="chip" data-cham-filter="andamento">Em andamento</button>
-              <button class="chip" data-cham-filter="resolvido">Resolvidos</button>
-            </div>
-          </div>
-        </div>
-        <div id="cham-list" class="cham-list"></div>
-      </div>
-    </div>
-  </div>
-</div>
-
 <!-- ═══════════ MODAL LISTA COMPLETA ═══════════ -->
 <div class="modal-overlay" id="modal-list" style="display:none">
   <div class="modal modal-fullscreen">
@@ -478,11 +405,106 @@
           <button class="list-tab active" data-list-tab="textos">📝 Textos <span class="list-tab-count" id="lt-count-textos"></span></button>
           <button class="list-tab" data-list-tab="tutoriais">📘 Tutoriais <span class="list-tab-count" id="lt-count-tutoriais"></span></button>
           <button class="list-tab" data-list-tab="lembretes">🔔 Lembretes <span class="list-tab-count" id="lt-count-lembretes"></span></button>
-          <button class="list-tab" data-list-tab="chamados">📋 Chamados <span class="list-tab-count" id="lt-count-chamados"></span></button>
         </div>
         <input type="text" id="list-search" class="list-search-input" placeholder="Filtrar itens…" />
       </div>
       <div id="list-content" class="list-content"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ MODAL CONTATOS ═══════════ -->
+<div class="modal-overlay" id="modal-contatos" style="display:none">
+  <div class="modal modal-large">
+    <div class="modal-header">
+      <h2 class="modal-title">📇 Contatos</h2>
+      <button class="modal-close" id="contato-modal-close">✕</button>
+    </div>
+    <div class="reminder-panel">
+      <div class="rem-form-wrap">
+        <div class="rem-form-title" id="contato-form-title">Novo contato</div>
+        <input type="hidden" id="contato-edit-id" />
+        <div class="form-group">
+          <label>Nome *</label>
+          <input type="text" id="contato-nome" placeholder="Nome do contato" />
+        </div>
+        <div class="form-group">
+          <label>Telefone</label>
+          <input type="text" id="contato-telefone" placeholder="(00) 00000-0000" />
+        </div>
+        <div class="form-group">
+          <label>Teams</label>
+          <input type="text" id="contato-teams" placeholder="email ou usuário do Teams" />
+        </div>
+        <div class="form-actions">
+          <button class="btn-secondary" id="contato-cancel">Cancelar</button>
+          <button class="btn-primary" id="contato-save">Salvar Contato</button>
+        </div>
+      </div>
+      <div class="rem-list-wrap">
+        <div class="rem-list-header">
+          <span class="panel-title">Contatos cadastrados</span>
+          <input type="text" id="contato-search" class="cham-search-input" placeholder="Buscar por nome…" style="margin-top:10px" />
+        </div>
+        <div id="contato-list" class="rem-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ MODAL LINKS ÚTEIS ═══════════ -->
+<div class="modal-overlay" id="modal-links" style="display:none">
+  <div class="modal modal-large">
+    <div class="modal-header">
+      <h2 class="modal-title">🔗 Links Úteis</h2>
+      <button class="modal-close" id="link-modal-close">✕</button>
+    </div>
+    <div class="reminder-panel">
+      <div class="rem-form-wrap">
+        <div class="rem-form-title" id="link-form-title">Novo link</div>
+        <input type="hidden" id="link-edit-id" />
+        <div class="form-group">
+          <label>Link (URL) *</label>
+          <input type="url" id="link-url" placeholder="https://…" />
+        </div>
+        <div class="form-group">
+          <label>Descrição *</label>
+          <input type="text" id="link-desc" placeholder="Para que serve este link" />
+        </div>
+        <div class="form-actions">
+          <button class="btn-secondary" id="link-cancel">Cancelar</button>
+          <button class="btn-primary" id="link-save">Salvar Link</button>
+        </div>
+      </div>
+      <div class="rem-list-wrap">
+        <div class="rem-list-header">
+          <span class="panel-title">Links cadastrados</span>
+          <input type="text" id="link-search" class="cham-search-input" placeholder="Buscar…" style="margin-top:10px" />
+        </div>
+        <div id="link-list" class="rem-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ MODAL COMPARTILHAR LEMBRETE ═══════════ -->
+<div class="modal-overlay" id="modal-share" style="display:none">
+  <div class="modal modal-ph">
+    <div class="modal-header">
+      <div>
+        <h2 class="modal-title">📤 Compartilhar lembrete</h2>
+        <p class="modal-subtitle" id="share-reminder-title"></p>
+      </div>
+      <button class="modal-close" id="share-modal-close">✕</button>
+    </div>
+    <div style="padding: 16px 24px 8px;">
+      <p style="font-size:13px; color:var(--text-secondary); margin-bottom:14px;">
+        Escolha com quem compartilhar. Uma cópia será enviada para a pessoa selecionada — ela terá a própria versão do lembrete.
+      </p>
+      <div class="share-user-list" id="share-user-list"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" id="share-cancel-btn" onclick="closeShareModal()">Cancelar</button>
     </div>
   </div>
 </div>
@@ -509,6 +531,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script src="firebase-config.js"></script>
-<script src="app.js"></script>
+<script src="app.js?v=9"></script>
 </body>
 </html>

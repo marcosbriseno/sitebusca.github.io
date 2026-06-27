@@ -2396,3 +2396,51 @@ function htmlToPlainText(html) {
 function getTutorialIcon(type){ return type==='video'?'🎥':type==='link'?'🌐':type==='email'?'📧':'📄'; }
 function getTutorialTypeLabel(type){ return type==='video'?'Vídeo':type==='link'?'Link externo':type==='email'?'E-mail':'Documento'; }
 function capitalizeFirst(str){ return str.charAt(0).toUpperCase()+str.slice(1).replace(/_/g,' '); }
+
+/* ═══════════════════════════════════════════════
+   PWA — registro do service worker + instalação
+   ═══════════════════════════════════════════════ */
+let _deferredInstallPrompt = null;
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('service-worker.js')
+      .then(reg => console.log('Service worker registrado:', reg.scope))
+      .catch(err => console.warn('Falha ao registrar service worker:', err));
+  });
+}
+
+// Captura o evento de "pode instalar" e mostra um botão discreto
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  _deferredInstallPrompt = e;
+  showInstallButton();
+});
+
+function showInstallButton() {
+  // Evita duplicar
+  if (qs('#pwa-install-btn')) return;
+  const btn = document.createElement('button');
+  btn.id = 'pwa-install-btn';
+  btn.className = 'pwa-install-btn';
+  btn.innerHTML = '📲 Instalar app';
+  btn.addEventListener('click', async () => {
+    if (!_deferredInstallPrompt) return;
+    _deferredInstallPrompt.prompt();
+    const { outcome } = await _deferredInstallPrompt.userChoice;
+    if (outcome === 'accepted') {
+      toast('📲 App instalado!', 'success');
+      btn.remove();
+    }
+    _deferredInstallPrompt = null;
+  });
+  document.body.appendChild(btn);
+  // some sozinho após 12s para não atrapalhar
+  setTimeout(() => { if (qs('#pwa-install-btn')) btn.classList.add('pwa-install-hide'); }, 12000);
+}
+
+// Quando instalado, esconde o botão
+window.addEventListener('appinstalled', () => {
+  const b = qs('#pwa-install-btn'); if (b) b.remove();
+  _deferredInstallPrompt = null;
+});

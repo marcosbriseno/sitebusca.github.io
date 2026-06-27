@@ -1183,3 +1183,27 @@ mark { background: rgba(189,147,249,0.28); color: var(--cyan); border-radius: 2p
   .header-search.desktop-nav { display: none !important; }
   .mobile-search-bar { display: flex; }
 }
+
+/* ═══════════════════════════════════════════════
+   BOTÃO INSTALAR PWA
+   ═══════════════════════════════════════════════ */
+.pwa-install-btn {
+  position: fixed; bottom: 20px; right: 20px; z-index: 200;
+  display: flex; align-items: center; gap: 6px;
+  padding: 12px 18px;
+  background: var(--cyan); color: var(--bg-base);
+  border: none; border-radius: 99px;
+  font-family: var(--font-ui); font-size: 14px; font-weight: 600;
+  cursor: pointer; box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+  transition: all var(--transition);
+  animation: pwa-pop 0.3s ease;
+}
+.pwa-install-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 26px rgba(0,0,0,0.5); }
+.pwa-install-hide { opacity: 0; pointer-events: none; transition: opacity 0.5s; }
+@keyframes pwa-pop {
+  from { opacity: 0; transform: translateY(20px) scale(0.9); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@media (max-width: 700px) {
+  .pwa-install-btn { bottom: 16px; right: 16px; padding: 10px 16px; font-size: 13px; }
+}

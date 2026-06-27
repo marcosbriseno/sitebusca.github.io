@@ -706,8 +706,8 @@ mark { background: rgba(189,147,249,0.28); color: var(--cyan); border-radius: 2p
   .hero { padding: 24px 14px 18px; }
   .hero-eyebrow { font-size: 10px; letter-spacing: 2px; }
   .hero-title { font-size: 22px; margin-bottom: 20px; }
-  .search-tabs { width: 100%; justify-content: center; }
-  .tab-btn { padding: 7px 14px; font-size: 12.5px; flex: 1; justify-content: center; }
+  .search-tabs { width: 100%; justify-content: flex-start; overflow-x: auto; flex-wrap: nowrap; }
+  .tab-btn { padding: 7px 14px; font-size: 12.5px; flex: 0 0 auto; justify-content: center; }
   .search-input { padding: 14px 44px 14px 44px; font-size: 15px; }
   .search-icon { left: 14px; font-size: 16px; }
   .search-clear { right: 10px; }

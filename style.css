@@ -1118,3 +1118,68 @@ mark { background: rgba(189,147,249,0.28); color: var(--cyan); border-radius: 2p
 .result-card[data-kind="contato"] .copy-hint,
 .result-card[data-kind="link"] .copy-hint,
 .result-card[data-kind="programa"] .copy-hint { color: var(--text-secondary); }
+
+/* ═══════════════════════════════════════════════
+   HEADER CONCEITO A — busca integrada + ícones
+   ═══════════════════════════════════════════════ */
+.header-search {
+  flex: 1; display: flex; align-items: center; gap: 8px;
+  background: var(--bg-base); border: 1.5px solid var(--border);
+  border-radius: 22px; padding: 8px 16px; margin: 0 16px;
+  transition: border-color var(--transition), box-shadow var(--transition);
+  max-width: 620px;
+}
+.header-search:focus-within { border-color: var(--cyan); box-shadow: var(--shadow-glow); }
+.header-search-icon { font-size: 14px; opacity: 0.7; }
+.header-search-input {
+  flex: 1; background: transparent; border: none; outline: none;
+  color: var(--text-primary); font-family: var(--font-ui); font-size: 14px;
+}
+.header-search-input::placeholder { color: var(--text-muted); }
+
+/* Botões-ícone compactos */
+.btn-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  position: relative;
+  width: 38px; height: 38px; padding: 0;
+  background: transparent; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); cursor: pointer;
+  font-size: 16px; color: var(--text-secondary);
+  transition: all var(--transition);
+}
+.btn-icon:hover { background: var(--bg-elevated); border-color: var(--text-muted); color: var(--text-primary); }
+.btn-icon .badge-count {
+  position: absolute; top: -5px; right: -5px;
+  background: var(--red); color:#fff; font-size: 10px; font-weight: 700;
+  min-width: 16px; height: 16px; padding: 0 4px; border-radius: 99px; line-height: 16px;
+}
+
+/* Barra de filtros (abas + categoria) — antes era o hero */
+.filter-bar {
+  max-width: 900px; margin: 0 auto; padding: 18px 20px 0;
+}
+
+/* Busca mobile (abaixo do header) */
+.mobile-search-bar {
+  display: none;
+  align-items: center; gap: 8px;
+  background: var(--bg-base); border-bottom: 1px solid var(--border);
+  padding: 10px 16px;
+}
+.mobile-search-bar .header-search-input { font-size: 15px; }
+
+/* Badge de contagem de uso nos "mais utilizados" */
+.use-badge {
+  margin-left: 6px; font-size: 10px; font-weight: 700;
+  background: var(--cyan-glow); color: var(--cyan);
+  padding: 1px 6px; border-radius: 99px; font-family: var(--font-mono);
+}
+
+/* ═══════════════════════════════════════════════
+   RESPONSIVO — header Conceito A
+   ═══════════════════════════════════════════════ */
+@media (max-width: 700px) {
+  /* esconde busca desktop, mostra busca mobile dedicada */
+  .header-search.desktop-nav { display: none !important; }
+  .mobile-search-bar { display: flex; }
+}

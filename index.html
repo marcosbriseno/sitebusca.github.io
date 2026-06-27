@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SupportBase — Central de Conhecimento</title>
-  <link rel="stylesheet" href="style.css?v=14" />
+  <link rel="stylesheet" href="style.css?v=15" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 </head>
@@ -57,11 +57,18 @@
       <span class="brand-name">SupportBase</span>
     </div>
 
-    <!-- DESKTOP NAV -->
+    <!-- BUSCA INTEGRADA NO HEADER (desktop) -->
+    <div class="header-search desktop-nav">
+      <span class="header-search-icon">🔎</span>
+      <input type="text" id="search-input" class="header-search-input" placeholder="Buscar textos, tutoriais, contatos, links, programas… (Ctrl+K)" autocomplete="off" />
+      <button class="search-clear" id="search-clear" title="Limpar">✕</button>
+    </div>
+
+    <!-- AÇÕES COMPACTAS (desktop) -->
     <nav class="header-actions desktop-nav">
       <!-- Menu Cadastrar (dropdown) -->
       <div class="header-dropdown">
-        <button class="btn-ghost" id="btn-cadastrar-menu"><span class="icon">＋</span> Cadastrar ▾</button>
+        <button class="btn-icon" id="btn-cadastrar-menu" title="Cadastrar"><span class="icon">＋</span></button>
         <div class="header-dropdown-menu" id="cadastrar-dropdown" style="display:none">
           <button class="header-dropdown-item" id="btn-open-register">📝 Texto / Tutorial</button>
           <button class="header-dropdown-item" id="btn-open-contatos">📇 Contato</button>
@@ -69,21 +76,22 @@
           <button class="header-dropdown-item" id="btn-open-programas">💿 Programa</button>
         </div>
       </div>
-      <button class="btn-ghost btn-reminders" id="btn-open-reminders">
-        🔔 Lembretes<span class="badge-count" id="reminder-badge" style="display:none"></span>
+      <button class="btn-icon btn-reminders" id="btn-open-reminders" title="Lembretes">
+        🔔<span class="badge-count" id="reminder-badge" style="display:none"></span>
       </button>
-      <button class="btn-ghost" id="btn-open-list"><span class="icon">☰</span> Lista</button>
-      <select id="db-select" class="db-select" title="Banco de dados">
-        <option value="">🗄️ Banco de dados</option>
-        <option value="backup">⬇ Fazer Backup</option>
-        <option value="restore">⬆ Restaurar Backup</option>
-      </select>
+      <!-- Banco de dados (só ADM) -->
+      <div class="header-dropdown admin-only" id="db-wrapper">
+        <button class="btn-icon" id="btn-db-menu" title="Banco de dados">🗄️</button>
+        <div class="header-dropdown-menu" id="db-dropdown" style="display:none">
+          <button class="header-dropdown-item" id="btn-db-backup">⬇ Fazer Backup</button>
+          <button class="header-dropdown-item" id="btn-db-restore">⬆ Restaurar Backup</button>
+        </div>
+      </div>
       <input type="file" id="input-restore" accept=".json" style="display:none" />
       <span class="header-divider"></span>
-      <span class="logged-user" id="logged-user-label">👤 …</span>
       <span class="sync-status" id="sync-status" title="Sincronização">☁️</span>
-      <button class="btn-ghost btn-theme" id="btn-theme" title="Alternar tema claro/escuro"><span class="icon">🌙</span></button>
-      <button class="btn-ghost btn-logout" id="btn-logout"><span class="icon">⏻</span> Sair</button>
+      <button class="btn-icon btn-theme" id="btn-theme" title="Tema claro/escuro"><span class="icon">🌙</span></button>
+      <button class="btn-icon btn-logout" id="btn-logout" title="Sair"><span class="icon">⏻</span></button>
     </nav>
 
     <!-- MOBILE NAV -->
@@ -95,6 +103,12 @@
       </button>
     </div>
   </header>
+
+  <!-- BUSCA MOBILE (abaixo do header) -->
+  <div class="mobile-search-bar">
+    <span class="header-search-icon">🔎</span>
+    <input type="text" id="search-input-mobile" class="header-search-input" placeholder="Buscar… (textos, contatos, links…)" autocomplete="off" />
+  </div>
 
   <!-- MENU DROPDOWN MOBILE -->
   <div class="mobile-menu-overlay" id="mobile-menu-overlay" style="display:none"></div>
@@ -111,10 +125,9 @@
       <button class="mobile-menu-item mobile-item-amber" id="m-btn-reminders">
         🔔 Lembretes <span class="badge-count" id="m-reminder-badge" style="display:none"></span>
       </button>
-      <button class="mobile-menu-item" id="m-btn-list">☰ Lista Completa</button>
-      <div class="mobile-menu-divider"></div>
-      <button class="mobile-menu-item" id="m-btn-backup">⬇ Fazer Backup</button>
-      <button class="mobile-menu-item" id="m-btn-restore">⬆ Restaurar Backup</button>
+      <div class="mobile-menu-divider admin-only"></div>
+      <button class="mobile-menu-item admin-only" id="m-btn-backup">⬇ Fazer Backup</button>
+      <button class="mobile-menu-item admin-only" id="m-btn-restore">⬆ Restaurar Backup</button>
       <button class="mobile-menu-item" id="m-btn-theme">🌙 Tema claro/escuro</button>
       <div class="mobile-menu-divider"></div>
       <button class="mobile-menu-item mobile-item-red" id="m-btn-logout">⏻ Sair</button>
@@ -126,10 +139,8 @@
     <div class="postits-scroll" id="postits-scroll"></div>
   </div>
 
-  <!-- ═══════════ HERO / BUSCA ═══════════ -->
-  <section class="hero">
-    <p class="hero-eyebrow">Central de Conhecimento</p>
-    <h1 class="hero-title">O que você precisa agora?</h1>
+  <!-- ═══════════ BARRA DE FILTROS (abas + categoria) ═══════════ -->
+  <section class="filter-bar">
     <div class="search-tabs">
       <button class="tab-btn active" data-type="todos"><span>🔍</span> Tudo</button>
       <button class="tab-btn" data-type="textos"><span>📝</span> Textos</button>
@@ -137,11 +148,6 @@
       <button class="tab-btn" data-type="contatos"><span>📇</span> Contatos</button>
       <button class="tab-btn" data-type="links"><span>🔗</span> Links</button>
       <button class="tab-btn" data-type="programas"><span>💿</span> Programas</button>
-    </div>
-    <div class="search-wrapper">
-      <span class="search-icon">🔎</span>
-      <input type="text" id="search-input" class="search-input" placeholder="Digite palavra-chave ou tag… (Ctrl+K)" autocomplete="off" />
-      <button class="search-clear" id="search-clear" title="Limpar">✕</button>
     </div>
     <div class="category-filter" id="category-filter">
       <span class="filter-label">Categoria:</span>
@@ -151,16 +157,11 @@
 
   <!-- ═══════════ MAIN ═══════════ -->
   <main class="main-content">
-    <section class="panel" id="panel-favorites">
-      <div class="panel-header"><span class="panel-title">⭐ Favoritos</span></div>
-      <div class="favorites-list" id="favorites-list"></div>
-    </section>
-    <section class="panel" id="panel-history">
+    <section class="panel" id="panel-most-used">
       <div class="panel-header">
-        <span class="panel-title">🕐 Acessados Recentemente</span>
-        <button class="btn-tiny" id="btn-clear-history">Limpar</button>
+        <span class="panel-title">🔥 Mais utilizados por você</span>
       </div>
-      <div class="history-list" id="history-list"></div>
+      <div class="history-list" id="most-used-list"></div>
     </section>
     <section class="results-section" id="results-section" style="display:none">
       <div class="results-header">
@@ -629,6 +630,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
 <script src="firebase-config.js"></script>
-<script src="app.js?v=14"></script>
+<script src="app.js?v=15"></script>
 </body>
 </html>

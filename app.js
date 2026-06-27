@@ -6,6 +6,7 @@
 
 /* ═══════════ ESTADO GLOBAL ═══════════ */
 let state = { textos: [], tutoriais: [], lembretes: [], contatos: [], links: [], programas: [], lembretesCompartilhados: [] };
+let usage = {};   // { itemId: contagem }  — uso PRIVADO por usuário
 let history   = [];
 let favorites = {};
 let activeType      = 'textos';
@@ -28,6 +29,8 @@ const SHARED_DOC_ID      = 'equipe';
 const SHARED_REM_DOC_ID  = 'lembretes_compartilhados';
 const PRIVATE_COLLECTION = 'supportbase_privado';
 const USERS_COLLECTION   = 'usuarios';  // diretório de usuários (p/ compartilhar lembretes)
+const ADMIN_EMAILS = ['marcosbriseno2@gmail.com'];  // quem vê Banco de Dados
+function isAdmin() { return ADMIN_EMAILS.includes((currentUser?.email||'').toLowerCase()); }
 
 let auth = null;
 let db   = null;
@@ -69,7 +72,7 @@ document.addEventListener('DOMContentLoaded', () => {
   auth.onAuthStateChanged(user => {
     if (user) {
       currentUser = user;
-      qs('#logged-user-label').textContent = `👤 ${user.email}`;
+      const lbl=qs('#logged-user-label'); if(lbl) lbl.textContent = `👤 ${user.email}`;
     const mobileLabel=qs('#mobile-user-label'); if(mobileLabel) mobileLabel.textContent=`👤 ${user.email}`;
       attachSharedListener();
       attachPrivateListener(user.uid);
@@ -77,6 +80,7 @@ document.addEventListener('DOMContentLoaded', () => {
       registerUserDirectory(user);
       loadUsersDirectory();
       showApp();
+      applyAdminVisibility();
     } else {
       currentUser = null;
       detachListeners();
@@ -241,10 +245,11 @@ function attachPrivateListener(uid) {
       }
       _lastPrivateJSON = incomingJSON;
       state.lembretes = data.lembretes || [];
+      usage = data.usage || {};
       markPrivateLoaded();
       refreshAllViews();
     } else {
-      const empty = { lembretes:[], updatedAt: Date.now() };
+      const empty = { lembretes:[], usage:{}, updatedAt: Date.now() };
       _lastPrivateJSON = JSON.stringify(empty);
       docRef.set(empty).then(markPrivateLoaded);
     }
@@ -274,7 +279,7 @@ function attachSharedRemListener() {
       refreshAllViews();
       scheduleAllAlarms();
     } else {
-      const empty = { lembretes:[], updatedAt: Date.now() };
+      const empty = { lembretes:[], usage:{}, updatedAt: Date.now() };
       _lastSharedRemJSON = JSON.stringify(empty);
       docRef.set(empty).catch(()=>{});
     }
@@ -308,8 +313,7 @@ function finishFirstLoad() {
   _firstSnapshotLoaded = true;
   hide(qs('#loading-overlay'));
   show(qs('#app'));
-  renderHistory();
-  renderFavorites();
+  renderMostUsed();
   renderCategoryChips();
   renderPostIts();
   scheduleAllAlarms();
@@ -319,8 +323,7 @@ function finishFirstLoad() {
 }
 
 function refreshAllViews() {
-  renderHistory();
-  renderFavorites();
+  renderMostUsed();
   renderCategoryChips();
   renderPostIts();
   scheduleAllAlarms();
@@ -361,7 +364,7 @@ function savePrivate() {
 function doSavePrivate() {
   if (!currentUser || !db) return;
   const payload = {
-    lembretes: state.lembretes, updatedAt: Date.now()
+    lembretes: state.lembretes, usage, updatedAt: Date.now()
   };
   _lastPrivateJSON = JSON.stringify(payload);
   db.collection(PRIVATE_COLLECTION).doc(currentUser.uid).set(payload)
@@ -384,8 +387,8 @@ function setSyncStatus(status) {
 // privado = lembretes. Assim qualquer alteração é persistida
 // no lugar certo sem precisar saber a origem da chamada.
 function saveDB()      { saveShared(); savePrivate(); }
-function saveHistory() { saveShared(); }
-function saveFavs()    { saveShared(); }
+function saveHistory() { /* histórico virou uso privado */ }
+function saveFavs()    { /* favoritos removidos */ }
 
 /* ═══════════════════════════════════════════════
    BIND EVENTS — tudo em um lugar
@@ -423,7 +426,6 @@ function bindEvents() {
     'm-btn-links':     '#btn-open-links',
     'm-btn-programas': '#btn-open-programas',
     'm-btn-reminders': '#btn-open-reminders',
-    'm-btn-list':      '#btn-open-list',
     'm-btn-logout':    '#btn-logout',
   };
   Object.entries(mobileMap).forEach(([mobileId, desktopId]) => {
@@ -441,6 +443,15 @@ function bindEvents() {
     closeMobileMenu();
     setTimeout(() => qs('#input-restore').click(), 80);
   });
+
+  /* ── BUSCA MOBILE (espelha a principal) ── */
+  const sim = qs('#search-input-mobile');
+  if (sim) {
+    sim.addEventListener('input', () => {
+      qs('#search-input').value = sim.value;
+      doSearch();
+    });
+  }
 
   /* ── BUSCA ── */
   const si = qs('#search-input');
@@ -519,12 +530,17 @@ function bindEvents() {
   qs('#ph-confirm').addEventListener('click', () => confirmPlaceholders());
 
   /* ── BACKUP / RESTORE ── */
-  // Select "Banco de dados" (desktop): backup ou restore
-  qs('#db-select').addEventListener('change', e => {
-    const val = e.target.value;
-    if (val === 'backup') doBackup();
-    if (val === 'restore') qs('#input-restore').click();
-    e.target.value = ''; // volta ao label padrão
+  // Banco de dados (dropdown, só admin)
+  qs('#btn-db-menu')?.addEventListener('click', e => {
+    e.stopPropagation();
+    const dd = qs('#db-dropdown');
+    dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
+  });
+  qs('#btn-db-backup')?.addEventListener('click', () => { qs('#db-dropdown').style.display='none'; doBackup(); });
+  qs('#btn-db-restore')?.addEventListener('click', () => { qs('#db-dropdown').style.display='none'; qs('#input-restore').click(); });
+  document.addEventListener('click', e => {
+    const dd = qs('#db-dropdown');
+    if (dd && dd.style.display === 'block' && !e.target.closest('#db-wrapper')) dd.style.display='none';
   });
   qs('#input-restore').addEventListener('change', e => doRestore(e.target.files[0]));
 
@@ -562,9 +578,7 @@ function bindEvents() {
   qs('#prog-file-remove').addEventListener('click', removeProgFile);
 
   /* ── HISTÓRICO ── */
-  qs('#btn-clear-history').addEventListener('click', () => {
-    history = []; saveHistory(); renderHistory(); toast('Histórico limpo', 'info');
-  });
+
 
   /* ── LEMBRETES ── */
   qs('#btn-open-reminders').addEventListener('click', openRemindersModal);
@@ -596,7 +610,7 @@ function bindEvents() {
   /* ── CHAMADOS ── */
 
   /* ── LISTA COMPLETA ── */
-  qs('#btn-open-list').addEventListener('click', openListModal);
+  qs('#btn-open-list')?.addEventListener('click', openListModal);
   qs('#list-modal-close').addEventListener('click', () => hide(qs('#modal-list')));
   qs('#modal-list').addEventListener('click', e => { if (e.target === qs('#modal-list')) hide(qs('#modal-list')); });
   qsa('.list-tab').forEach(tab => {
@@ -685,7 +699,7 @@ function doSearch() {
 }
 
 function showResults(items, query) {
-  hide(qs('#panel-history')); hide(qs('#panel-favorites'));
+  hide(qs('#panel-most-used'));
   show(qs('#results-section'));
   qs('#results-count').textContent = `${items.length} resultado${items.length!==1?'s':''} encontrado${items.length!==1?'s':''}`;
 
@@ -699,7 +713,6 @@ function showResults(items, query) {
     card.addEventListener('click', e => { if (e.target.closest('.action-btn')) return; handleCardClick(card.dataset.id, card.dataset.kind); });
     card.addEventListener('keydown', e => { if (e.key==='Enter') handleCardClick(card.dataset.id, card.dataset.kind); });
     card.querySelector('.btn-copy')?.addEventListener('click', e => { e.stopPropagation(); handleCardClick(card.dataset.id, card.dataset.kind); });
-    card.querySelector('.btn-fav')?.addEventListener('click', e => { e.stopPropagation(); toggleFav(card.dataset.id, card); });
     card.querySelector('.btn-edit')?.addEventListener('click', e => { e.stopPropagation(); openModalEdit(card.dataset.id, card.dataset.kind); });
     card.querySelector('.btn-delete')?.addEventListener('click', e => { e.stopPropagation(); deleteItem(card.dataset.id, card.dataset.kind); });
   });
@@ -707,7 +720,6 @@ function showResults(items, query) {
 
 function renderCard(item, query='') {
   const kind = item.kind;
-  const isFav = !!favorites[item.id];
 
   // ── CONTATO ──
   if (kind === 'contato') {
@@ -720,7 +732,6 @@ function renderCard(item, query='') {
       <div class="card-top">
         <div class="card-badges"><span class="badge badge-contato">📇 Contato</span></div>
         <div class="card-actions">
-          <button class="action-btn btn-fav ${isFav?'fav-active':''}">${isFav?'⭐':'☆'}</button>
           <button class="action-btn btn-edit">✏️</button>
           <button class="action-btn btn-delete delete-btn">🗑</button>
         </div>
@@ -739,7 +750,6 @@ function renderCard(item, query='') {
       <div class="card-top">
         <div class="card-badges"><span class="badge badge-link">🔗 Link</span></div>
         <div class="card-actions">
-          <button class="action-btn btn-fav ${isFav?'fav-active':''}">${isFav?'⭐':'☆'}</button>
           <button class="action-btn btn-edit">✏️</button>
           <button class="action-btn btn-delete delete-btn">🗑</button>
         </div>
@@ -762,7 +772,6 @@ function renderCard(item, query='') {
       <div class="card-top">
         <div class="card-badges"><span class="badge badge-programa">💿 Programa</span></div>
         <div class="card-actions">
-          <button class="action-btn btn-fav ${isFav?'fav-active':''}">${isFav?'⭐':'☆'}</button>
           <button class="action-btn btn-edit">✏️</button>
           <button class="action-btn btn-delete delete-btn">🗑</button>
         </div>
@@ -790,7 +799,6 @@ function renderCard(item, query='') {
       </div>
       <div class="card-actions">
         ${kind==='texto' ? `<button class="action-btn btn-copy" title="Copiar">📋</button>` : ''}
-        <button class="action-btn btn-fav ${isFav?'fav-active':''}">${isFav?'⭐':'☆'}</button>
         <button class="action-btn btn-edit">✏️</button>
         <button class="action-btn btn-delete delete-btn">🗑</button>
       </div>
@@ -1035,62 +1043,57 @@ function deleteItem(id, kind) {
     if (p && p.fileStoredName && storage) storage.ref(`programas/${p.fileStoredName}`).delete().catch(()=>{});
     state.programas = state.programas.filter(t=>t.id!==id);
   }
-  delete favorites[id];
-  history = history.filter(h=>h.id!==id);
-  saveDB(); saveFavs(); saveHistory();
-  renderHistory(); renderFavorites(); renderCategoryChips(); updateListCounts();
+  delete usage[id];
+  savePrivate();
+  saveDB();
+  renderMostUsed(); renderCategoryChips(); updateListCounts();
   toast('🗑 Item removido','info');
   if (qs('#search-input').value.trim()) doSearch();
 }
 
 /* ═══════════════════════════════════════════════
-   FAVORITOS
+   MAIS UTILIZADOS (por usuário)
    ═══════════════════════════════════════════════ */
-function toggleFav(id, card) {
-  if (favorites[id]) {
-    delete favorites[id];
-    if (card) { card.querySelector('.btn-fav')?.classList.remove('fav-active'); card.querySelector('.btn-fav').textContent='☆'; }
-    toast('Removido dos favoritos','info');
-  } else {
-    favorites[id]=true;
-    if (card) { card.querySelector('.btn-fav')?.classList.add('fav-active'); card.querySelector('.btn-fav').textContent='⭐'; }
-    toast('⭐ Adicionado aos favoritos!','success');
-  }
-  saveFavs(); renderFavorites();
-}
-function renderFavorites() {
-  const list=qs('#favorites-list'), ids=Object.keys(favorites);
-  if (!ids.length) { list.innerHTML='<span class="empty-state">Nenhum favorito ainda.</span>'; return; }
-  list.innerHTML = ids.map(id=>{
-    const t=state.textos.find(x=>x.id===id), tu=state.tutoriais.find(x=>x.id===id);
-    const item=t||tu; if (!item) return '';
-    return `<div class="fav-chip" data-id="${id}" data-kind="${t?'texto':'tutorial'}">
-      <span>${t?'📝':'📘'}</span><span>${escHtml(truncate(item.keyword||'',30))}</span>
-    </div>`;
-  }).join('');
-  qsa('.fav-chip').forEach(chip => {
-    chip.addEventListener('click', ()=>{ qs('#search-input').value=chip.querySelector('span:last-child').textContent; qs('#search-clear').classList.add('visible'); doSearch(); });
-  });
+// Resolve um item (de qualquer tipo) pelo id, retornando {item, kind, label, icon}
+function resolveItem(id) {
+  let it = state.textos.find(x=>x.id===id);
+  if (it) return { item:it, kind:'texto', label:it.keyword, icon:'📝' };
+  it = state.tutoriais.find(x=>x.id===id);
+  if (it) return { item:it, kind:'tutorial', label:it.keyword||it.title, icon:'📘' };
+  it = state.contatos.find(x=>x.id===id);
+  if (it) return { item:it, kind:'contato', label:it.nome, icon:'📇' };
+  it = state.links.find(x=>x.id===id);
+  if (it) return { item:it, kind:'link', label:it.desc, icon:'🔗' };
+  it = state.programas.find(x=>x.id===id);
+  if (it) return { item:it, kind:'programa', label:it.nome, icon:'💿' };
+  return null;
 }
 
-/* ═══════════════════════════════════════════════
-   HISTÓRICO
-   ═══════════════════════════════════════════════ */
-function addToHistory(item, kind) {
-  history = history.filter(h=>h.id!==item.id);
-  history.unshift({ id:item.id, kind, keyword:item.keyword||item.title });
-  if (history.length>15) history=history.slice(0,15);
-  saveHistory(); renderHistory();
-}
-function renderHistory() {
-  const list=qs('#history-list');
-  if (!history.length) { list.innerHTML='<span class="empty-state">Nenhum item acessado ainda.</span>'; return; }
-  list.innerHTML = history.map(h=>`
-    <div class="history-chip" data-id="${h.id}" data-kind="${h.kind}" title="${escHtml(h.keyword||'')}">
-      ${h.kind==='texto'?'📝':'📘'}<span>${escHtml(truncate(h.keyword||'',28))}</span>
+function renderMostUsed() {
+  const list=qs('#most-used-list');
+  if (!list) return;
+  // ordena por contagem de uso (desc), pega top 15 que ainda existem
+  const ranked = Object.entries(usage)
+    .sort((a,b)=>b[1]-a[1])
+    .map(([id,count])=>({ id, count, ...(resolveItem(id)||{}) }))
+    .filter(x=>x.item)
+    .slice(0,15);
+
+  if (!ranked.length) {
+    list.innerHTML='<span class="empty-state">Nada utilizado ainda. Conforme você usa textos, tutoriais e outros itens, os mais acessados aparecem aqui.</span>';
+    return;
+  }
+  list.innerHTML = ranked.map(r=>`
+    <div class="history-chip" data-id="${r.id}" data-kind="${r.kind}" title="${escHtml(r.label||'')}">
+      ${r.icon}<span>${escHtml(truncate(r.label||'',26))}</span>
+      <span class="use-badge">${r.count}×</span>
     </div>`).join('');
-  qsa('.history-chip').forEach(chip => chip.addEventListener('click', ()=>handleCardClick(chip.dataset.id, chip.dataset.kind)));
+  qsa('#most-used-list .history-chip').forEach(chip =>
+    chip.addEventListener('click', ()=>handleCardClick(chip.dataset.id, chip.dataset.kind)));
 }
+
+// compatibilidade: addToHistory agora só conta uso (o "histórico" virou "mais usados")
+function addToHistory(item, kind) { /* a contagem é feita em incrementUse */ }
 
 /* ═══════════════════════════════════════════════
    CATEGORIAS
@@ -1109,14 +1112,15 @@ function renderCategoryChips() {
 }
 
 function incrementUse(id, kind) {
-  const arr=kind==='texto'?state.textos:state.tutoriais;
-  const item=arr.find(t=>t.id===id);
-  if (item) { item.useCount=(item.useCount||0)+1; saveDB(); }
+  // contagem PRIVADA por usuário
+  usage[id] = (usage[id]||0) + 1;
+  savePrivate();
+  renderMostUsed();
 }
 
 function clearSearch() {
   qs('#search-input').value=''; qs('#search-clear').classList.remove('visible');
-  hide(qs('#results-section')); show(qs('#panel-history')); show(qs('#panel-favorites')); focusSearch();
+  hide(qs('#results-section')); show(qs('#panel-most-used')); focusSearch();
 }
 function focusSearch() { qs('#search-input').focus(); }
 function focusResult(idx) { qsa('.result-card')[idx]?.focus(); }
@@ -1777,7 +1781,7 @@ function doRestore(file) {
       state.programas = data.programas || [];
       favorites=data.favorites||{}; history=data.history||[];
       saveDB(); saveFavs(); saveHistory();
-      renderHistory(); renderFavorites(); renderCategoryChips(); updateBadges(); updateListCounts(); scheduleAllAlarms();
+      renderMostUsed(); renderCategoryChips(); updateBadges(); updateListCounts(); scheduleAllAlarms();
       toast('⬆ Backup restaurado!','success');
     } catch { toast('❌ Arquivo inválido','error'); }
     qs('#input-restore').value='';
@@ -2336,6 +2340,16 @@ function initTheme() {
   let saved = 'dark';
   try { saved = localStorage.getItem(THEME_KEY) || 'dark'; } catch(e){}
   applyTheme(saved);
+}
+
+/* ═══════════════════════════════════════════════
+   VISIBILIDADE DE ADMIN
+   ═══════════════════════════════════════════════ */
+function applyAdminVisibility() {
+  const admin = isAdmin();
+  qsa('.admin-only').forEach(el => {
+    el.style.display = admin ? '' : 'none';
+  });
 }
 
 /* ═══════════════════════════════════════════════

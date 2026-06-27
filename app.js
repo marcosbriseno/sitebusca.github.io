@@ -585,7 +585,7 @@ function bindEvents() {
   qs('#rem-modal-close').addEventListener('click', () => hide(qs('#modal-reminders')));
   qs('#modal-reminders').addEventListener('click', e => { if (e.target === qs('#modal-reminders')) hide(qs('#modal-reminders')); });
   qs('#rem-save').addEventListener('click', saveLembrete);
-  qs('#rem-cancel').addEventListener('click', resetRemForm);
+  qs('#rem-cancel').addEventListener('click', () => { resetRemForm(); hide(qs('#modal-reminders')); });
   qs('#share-modal-close').addEventListener('click', closeShareModal);
   qs('#share-cancel-btn').addEventListener('click', closeShareModal);
   qs('#share-confirm-btn').addEventListener('click', confirmShare);

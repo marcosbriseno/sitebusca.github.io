@@ -715,7 +715,42 @@ function showResults(items, query) {
     card.querySelector('.btn-copy')?.addEventListener('click', e => { e.stopPropagation(); handleCardClick(card.dataset.id, card.dataset.kind); });
     card.querySelector('.btn-edit')?.addEventListener('click', e => { e.stopPropagation(); openModalEdit(card.dataset.id, card.dataset.kind); });
     card.querySelector('.btn-delete')?.addEventListener('click', e => { e.stopPropagation(); deleteItem(card.dataset.id, card.dataset.kind); });
+    card.querySelector('.prog-share-teams')?.addEventListener('click', e => { e.stopPropagation(); shareProgramOnTeams(card.dataset.id); });
   });
+}
+
+// Copia o link do programa (arquivo ou OneDrive) para a área de transferência
+function shareProgramOnTeams(id) {
+  const p = state.programas.find(x => x.id === id);
+  if (!p) return;
+
+  const link = p.fileUrl || p.onedrive || '';
+  if (!link) {
+    toast('Este programa não tem link nem arquivo para compartilhar.', 'warn');
+    return;
+  }
+
+  // copia para a área de transferência (com fallback para navegadores antigos)
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(link)
+      .then(() => toast('📋 Link copiado! Cole no Teams.', 'success'))
+      .catch(() => fallbackCopy(link));
+  } else {
+    fallbackCopy(link);
+  }
+}
+
+// Fallback de cópia para navegadores que não suportam a Clipboard API
+function fallbackCopy(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand('copy'); toast('📋 Link copiado! Cole no Teams.', 'success'); }
+  catch { toast('Não foi possível copiar o link.', 'error'); }
+  document.body.removeChild(ta);
 }
 
 function renderCard(item, query='') {
@@ -772,6 +807,7 @@ function renderCard(item, query='') {
       <div class="card-top">
         <div class="card-badges"><span class="badge badge-programa">💿 Programa</span></div>
         <div class="card-actions">
+          <button class="action-btn prog-share-teams" title="Copiar link para o Teams">📋</button>
           <button class="action-btn btn-edit">✏️</button>
           <button class="action-btn btn-delete delete-btn">🗑</button>
         </div>

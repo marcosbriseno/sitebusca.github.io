@@ -1396,6 +1396,33 @@ function openRemindersModal() {
   qs('#rem-time').value=fmtTime(now);
 }
 
+// Abre o modal de lembretes já com um lembrete específico carregado para edição.
+// Usado ao clicar num post-it da tela inicial.
+function openReminderForEdit(id) {
+  const priv = state.lembretes.find(x => x.id === id);
+  const shar = state.lembretesCompartilhados.find(x => x.id === id);
+  const l = priv || shar;
+  if (!l) { openRemindersModal(); return; }
+
+  resetRemForm();
+  renderLembretes();
+  show(qs('#modal-reminders'));
+
+  const isShared = !!shar;
+  qs('#rem-edit-id').value = id;
+  qs('#rem-edit-shared').value = isShared ? '1' : '';
+  qs('#rem-form-title').textContent = isShared ? 'Editar lembrete compartilhado' : 'Editar lembrete';
+  qs('#rem-title').value = l.title;
+  qs('#rem-desc').value = l.desc || '';
+  qs('#rem-date').value = l.date;
+  qs('#rem-time').value = l.time;
+  qs('#rem-priority').value = l.priority;
+  qs('#rem-recurrence').value = l.recurrence;
+  qs('#rem-alarm').checked = l.alarm;
+  // leva o formulário à vista
+  qs('#rem-title').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
 function saveLembrete() {
   const title=qs('#rem-title').value.trim(), date=qs('#rem-date').value, time=qs('#rem-time').value;
   if (!title||!date||!time) { toast('Preencha título, data e hora','warn'); return; }
@@ -1932,7 +1959,8 @@ function renderPostIts() {
   qsa('.postit').forEach(card => {
     card.addEventListener('click', e => {
       if (e.target.classList.contains('postit-done-btn')) return;
-      openRemindersModal();
+      const id = card.dataset.id;
+      openReminderForEdit(id);
     });
   });
 

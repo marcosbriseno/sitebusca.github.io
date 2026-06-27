@@ -7,7 +7,7 @@
      (precisa de tempo real, não pode ser cacheado)
    ═══════════════════════════════════════════════ */
 
-const CACHE_NAME = 'supportbase-v16';
+const CACHE_NAME = 'supportbase-v18';
 
 // Arquivos essenciais para funcionar offline
 const APP_SHELL = [

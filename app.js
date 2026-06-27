@@ -549,7 +549,7 @@ function bindEvents() {
   qs('#prog-modal-close').addEventListener('click', () => hide(qs('#modal-programas')));
   qs('#modal-programas').addEventListener('click', e => { if (e.target === qs('#modal-programas')) hide(qs('#modal-programas')); });
   qs('#prog-save').addEventListener('click', savePrograma);
-  qs('#prog-cancel').addEventListener('click', resetProgForm);
+  qs('#prog-cancel').addEventListener('click', () => { resetProgForm(); hide(qs('#modal-programas')); });
   qs('#prog-search').addEventListener('input', renderProgramas);
 
   // editor rico do manual de programa
@@ -628,7 +628,7 @@ function bindEvents() {
   qs('#contato-modal-close').addEventListener('click', () => hide(qs('#modal-contatos')));
   qs('#modal-contatos').addEventListener('click', e => { if (e.target === qs('#modal-contatos')) hide(qs('#modal-contatos')); });
   qs('#contato-save').addEventListener('click', saveContato);
-  qs('#contato-cancel').addEventListener('click', resetContatoForm);
+  qs('#contato-cancel').addEventListener('click', () => { resetContatoForm(); hide(qs('#modal-contatos')); });
   qs('#contato-search').addEventListener('input', renderContatos);
 
   /* ── LINKS ── */
@@ -636,7 +636,7 @@ function bindEvents() {
   qs('#link-modal-close').addEventListener('click', () => hide(qs('#modal-links')));
   qs('#modal-links').addEventListener('click', e => { if (e.target === qs('#modal-links')) hide(qs('#modal-links')); });
   qs('#link-save').addEventListener('click', saveLink);
-  qs('#link-cancel').addEventListener('click', resetLinkForm);
+  qs('#link-cancel').addEventListener('click', () => { resetLinkForm(); hide(qs('#modal-links')); });
   qs('#link-search').addEventListener('input', renderLinks);
 
   /* ── TEMA ── */

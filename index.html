@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SupportBase — Central de Conhecimento</title>
-  <link rel="stylesheet" href="style.css?v=10" />
+  <link rel="stylesheet" href="style.css?v=13" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 </head>
@@ -142,16 +142,16 @@
 
   <!-- ═══════════ MAIN ═══════════ -->
   <main class="main-content">
+    <section class="panel" id="panel-favorites">
+      <div class="panel-header"><span class="panel-title">⭐ Favoritos</span></div>
+      <div class="favorites-list" id="favorites-list"></div>
+    </section>
     <section class="panel" id="panel-history">
       <div class="panel-header">
         <span class="panel-title">🕐 Acessados Recentemente</span>
         <button class="btn-tiny" id="btn-clear-history">Limpar</button>
       </div>
       <div class="history-list" id="history-list"></div>
-    </section>
-    <section class="panel" id="panel-favorites">
-      <div class="panel-header"><span class="panel-title">⭐ Favoritos</span></div>
-      <div class="favorites-list" id="favorites-list"></div>
     </section>
     <section class="results-section" id="results-section" style="display:none">
       <div class="results-header">
@@ -334,6 +334,7 @@
       <div class="rem-form-wrap" id="rem-form-wrap">
         <div class="rem-form-title" id="rem-form-title">Novo lembrete</div>
         <input type="hidden" id="rem-edit-id" />
+        <input type="hidden" id="rem-edit-shared" />
         <div class="rem-form-grid">
           <div class="form-group" style="grid-column:1/-1">
             <label>Título *</label>
@@ -438,7 +439,7 @@
           <input type="url" id="prog-onedrive" placeholder="https://onedrive…" />
         </div>
         <div class="form-group">
-          <label>Manual de instalação</label>
+          <label>Manual de instalação (texto)</label>
           <div class="editor-toolbar">
             <button type="button" class="toolbar-btn" data-prog-cmd="bold"><b>B</b></button>
             <button type="button" class="toolbar-btn" data-prog-cmd="italic"><i>I</i></button>
@@ -449,6 +450,22 @@
             <small class="toolbar-hint">Cole imagens com Ctrl+V</small>
           </div>
           <div id="prog-manual" class="rich-editor" contenteditable="true" data-placeholder="Passo a passo da instalação. Cole imagens com Ctrl+V…"></div>
+        </div>
+        <div class="form-group">
+          <label>Anexar arquivo (Word, Excel, PowerPoint ou PDF)</label>
+          <div class="file-upload-area" id="prog-file-area">
+            <input type="file" id="prog-file-input" accept=".doc,.docx,.xls,.xlsx,.ppt,.pptx,.pdf" style="display:none" />
+            <button type="button" class="btn-secondary file-upload-btn" id="prog-file-btn">📎 Escolher arquivo</button>
+            <div class="file-attached" id="prog-file-attached" style="display:none">
+              <span class="file-attached-name" id="prog-file-name"></span>
+              <button type="button" class="file-remove-btn" id="prog-file-remove" title="Remover">✕</button>
+            </div>
+            <div class="file-upload-progress" id="prog-file-progress" style="display:none">
+              <div class="file-upload-bar" id="prog-file-bar"></div>
+            </div>
+          </div>
+          <input type="hidden" id="prog-file-url" />
+          <input type="hidden" id="prog-file-stored-name" />
         </div>
         <div class="form-actions">
           <button class="btn-secondary" id="prog-cancel">Cancelar</button>
@@ -517,12 +534,12 @@
         <div class="rem-form-title" id="link-form-title">Novo link</div>
         <input type="hidden" id="link-edit-id" />
         <div class="form-group">
-          <label>Link (URL) *</label>
-          <input type="url" id="link-url" placeholder="https://…" />
+          <label>Nome *</label>
+          <input type="text" id="link-desc" placeholder="Nome do link" />
         </div>
         <div class="form-group">
-          <label>Descrição *</label>
-          <input type="text" id="link-desc" placeholder="Para que serve este link" />
+          <label>Link (URL) *</label>
+          <input type="url" id="link-url" placeholder="https://…" />
         </div>
         <div class="form-actions">
           <button class="btn-secondary" id="link-cancel">Cancelar</button>
@@ -552,12 +569,30 @@
     </div>
     <div style="padding: 16px 24px 8px;">
       <p style="font-size:13px; color:var(--text-secondary); margin-bottom:14px;">
-        Escolha com quem compartilhar. Uma cópia será enviada para a pessoa selecionada — ela terá a própria versão do lembrete.
+        Marque <strong>Todos</strong> ou escolha usuários específicos. O lembrete vira colaborativo: todos veem a mesma versão, podem editar, e cada edição fica registrada no histórico.
       </p>
       <div class="share-user-list" id="share-user-list"></div>
     </div>
     <div class="modal-footer">
-      <button class="btn-secondary" id="share-cancel-btn" onclick="closeShareModal()">Cancelar</button>
+      <button class="btn-secondary" id="share-cancel-btn">Cancelar</button>
+      <button class="btn-primary" id="share-confirm-btn">📤 Compartilhar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ MODAL HISTÓRICO DE EDIÇÕES ═══════════ -->
+<div class="modal-overlay" id="modal-history" style="display:none">
+  <div class="modal modal-ph">
+    <div class="modal-header">
+      <div>
+        <h2 class="modal-title">🕓 Histórico de edições</h2>
+        <p class="modal-subtitle" id="history-reminder-title"></p>
+      </div>
+      <button class="modal-close" id="history-modal-close">✕</button>
+    </div>
+    <div class="history-list-body" id="history-list-body" style="padding:12px 24px 8px;"></div>
+    <div class="modal-footer">
+      <button class="btn-secondary" id="history-close-btn">Fechar</button>
     </div>
   </div>
 </div>
@@ -583,7 +618,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
 <script src="firebase-config.js"></script>
-<script src="app.js?v=10"></script>
+<script src="app.js?v=13"></script>
 </body>
 </html>

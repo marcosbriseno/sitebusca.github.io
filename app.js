@@ -5,7 +5,7 @@
 "use strict";
 
 /* ═══════════ ESTADO GLOBAL ═══════════ */
-let state = { textos: [], tutoriais: [], lembretes: [], contatos: [], links: [], programas: [] };
+let state = { textos: [], tutoriais: [], lembretes: [], contatos: [], links: [], programas: [], lembretesCompartilhados: [] };
 let history   = [];
 let favorites = {};
 let activeType      = 'textos';
@@ -25,11 +25,13 @@ let activeRemFilter = 'all';
 //       lembretes (cada usuário tem os seus + compartilhados)
 const SHARED_COLLECTION  = 'supportbase';
 const SHARED_DOC_ID      = 'equipe';
+const SHARED_REM_DOC_ID  = 'lembretes_compartilhados';
 const PRIVATE_COLLECTION = 'supportbase_privado';
 const USERS_COLLECTION   = 'usuarios';  // diretório de usuários (p/ compartilhar lembretes)
 
 let auth = null;
 let db   = null;
+let storage = null;
 let currentUser = null;
 let unsubShared  = null;   // listener do documento compartilhado
 let unsubPrivate = null;   // listener do documento privado
@@ -42,6 +44,9 @@ let _privateLoaded = false;
 let _firstSnapshotLoaded = false;
 let usersDirectory = [];   // [{uid, email}] — outros usuários do sistema
 let _shareReminderId = null;
+let unsubSharedRem = null;
+let saveSharedRemTimer = null;
+let _lastSharedRemJSON = null;
 
 /* ═══════════════════════════════════════════════
    INIT
@@ -51,6 +56,7 @@ document.addEventListener('DOMContentLoaded', () => {
     firebase.initializeApp(FIREBASE_CONFIG);
     auth = firebase.auth();
     db   = firebase.firestore();
+    storage = firebase.storage();
     db.enablePersistence({ synchronizeTabs: true }).catch(()=>{});
   } catch (e) {
     console.error('Erro ao iniciar Firebase. Verifique firebase-config.js', e);
@@ -67,6 +73,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const mobileLabel=qs('#mobile-user-label'); if(mobileLabel) mobileLabel.textContent=`👤 ${user.email}`;
       attachSharedListener();
       attachPrivateListener(user.uid);
+      attachSharedRemListener();
       registerUserDirectory(user);
       loadUsersDirectory();
       showApp();
@@ -250,7 +257,43 @@ function attachPrivateListener(uid) {
 function detachListeners() {
   if (unsubShared)  { unsubShared();  unsubShared  = null; }
   if (unsubPrivate) { unsubPrivate(); unsubPrivate = null; }
-  _lastSharedJSON = null; _lastPrivateJSON = null;
+  if (unsubSharedRem) { unsubSharedRem(); unsubSharedRem = null; }
+  _lastSharedJSON = null; _lastPrivateJSON = null; _lastSharedRemJSON = null;
+}
+
+/* ---------- LISTENER LEMBRETES COMPARTILHADOS ---------- */
+function attachSharedRemListener() {
+  const docRef = db.collection(SHARED_COLLECTION).doc(SHARED_REM_DOC_ID);
+  unsubSharedRem = docRef.onSnapshot(snap => {
+    if (snap.exists) {
+      const data = snap.data();
+      const incomingJSON = JSON.stringify(data);
+      if (incomingJSON === _lastSharedRemJSON) return;
+      _lastSharedRemJSON = incomingJSON;
+      state.lembretesCompartilhados = data.lembretes || [];
+      refreshAllViews();
+      scheduleAllAlarms();
+    } else {
+      const empty = { lembretes:[], updatedAt: Date.now() };
+      _lastSharedRemJSON = JSON.stringify(empty);
+      docRef.set(empty).catch(()=>{});
+    }
+  }, err => {
+    console.error('Erro Firestore (lembretes compartilhados):', err);
+  });
+}
+
+function saveSharedRem() {
+  clearTimeout(saveSharedRemTimer);
+  saveSharedRemTimer = setTimeout(doSaveSharedRem, 500);
+}
+function doSaveSharedRem() {
+  if (!currentUser || !db) return;
+  const payload = { lembretes: state.lembretesCompartilhados, updatedAt: Date.now() };
+  _lastSharedRemJSON = JSON.stringify(payload);
+  db.collection(SHARED_COLLECTION).doc(SHARED_REM_DOC_ID).set(payload)
+    .then(() => setSyncStatus('synced'))
+    .catch(err => { console.error('Erro ao salvar lembretes compartilhados:', err); setSyncStatus('error'); });
 }
 
 // só libera a tela quando AMBOS os documentos carregaram
@@ -495,6 +538,10 @@ function bindEvents() {
       if (item.type.startsWith('image/')) { e.preventDefault(); insertImageInto(item.getAsFile(), '#prog-manual'); break; }
     }
   });
+  // upload de arquivo (Word/Excel/PPT/PDF)
+  qs('#prog-file-btn').addEventListener('click', () => qs('#prog-file-input').click());
+  qs('#prog-file-input').addEventListener('change', e => handleProgFileSelect(e.target.files[0]));
+  qs('#prog-file-remove').addEventListener('click', removeProgFile);
 
   /* ── HISTÓRICO ── */
   qs('#btn-clear-history').addEventListener('click', () => {
@@ -508,7 +555,13 @@ function bindEvents() {
   qs('#rem-save').addEventListener('click', saveLembrete);
   qs('#rem-cancel').addEventListener('click', resetRemForm);
   qs('#share-modal-close').addEventListener('click', closeShareModal);
+  qs('#share-cancel-btn').addEventListener('click', closeShareModal);
+  qs('#share-confirm-btn').addEventListener('click', confirmShare);
   qs('#modal-share').addEventListener('click', e => { if (e.target === qs('#modal-share')) closeShareModal(); });
+  // modal histórico
+  qs('#history-modal-close').addEventListener('click', () => hide(qs('#modal-history')));
+  qs('#history-close-btn').addEventListener('click', () => hide(qs('#modal-history')));
+  qs('#modal-history').addEventListener('click', e => { if (e.target === qs('#modal-history')) hide(qs('#modal-history')); });
   qsa('[data-rem-filter]').forEach(btn => {
     btn.addEventListener('click', () => {
       qsa('[data-rem-filter]').forEach(b => b.classList.remove('active'));
@@ -1055,7 +1108,7 @@ function loadUsersDirectory() {
   }).catch(err => console.warn('Não foi possível carregar usuários:', err));
 }
 
-// Abre o modal de compartilhamento para um lembrete específico.
+// Abre o modal de compartilhamento para um lembrete (com checkboxes).
 function openShareModal(reminderId) {
   _shareReminderId = reminderId;
   const l = state.lembretes.find(x => x.id === reminderId);
@@ -1066,16 +1119,27 @@ function openShareModal(reminderId) {
   const listEl = qs('#share-user-list');
   if (!usersDirectory.length) {
     listEl.innerHTML = '<div class="empty-state" style="padding:16px">Nenhum outro usuário encontrado. Peça para a outra pessoa fazer login ao menos uma vez no sistema.</div>';
+    qs('#share-confirm-btn').style.display = 'none';
   } else {
-    listEl.innerHTML = usersDirectory.map(u => `
-      <button class="share-user-btn" data-uid="${escHtml(u.uid)}" data-email="${escHtml(u.email)}">
-        <span class="share-user-avatar">👤</span>
-        <span class="share-user-email">${escHtml(u.email)}</span>
-        <span class="share-user-arrow">→</span>
-      </button>
-    `).join('');
-    qsa('.share-user-btn').forEach(btn => {
-      btn.addEventListener('click', () => shareReminderWith(btn.dataset.uid, btn.dataset.email));
+    qs('#share-confirm-btn').style.display = 'inline-flex';
+    listEl.innerHTML = `
+      <label class="share-check-row share-check-all">
+        <input type="checkbox" id="share-check-all" />
+        <span class="share-user-avatar">👥</span>
+        <span class="share-user-email"><strong>Todos os usuários</strong></span>
+      </label>
+      <div class="share-divider-line"></div>
+      ${usersDirectory.map(u => `
+        <label class="share-check-row">
+          <input type="checkbox" class="share-check-user" value="${escHtml(u.uid)}" data-email="${escHtml(u.email)}" />
+          <span class="share-user-avatar">👤</span>
+          <span class="share-user-email">${escHtml(u.email)}</span>
+        </label>
+      `).join('')}
+    `;
+    // "Todos" marca/desmarca os demais
+    qs('#share-check-all').addEventListener('change', e => {
+      qsa('.share-check-user').forEach(cb => { cb.checked = e.target.checked; cb.disabled = e.target.checked; });
     });
   }
   show(qs('#modal-share'));
@@ -1086,37 +1150,81 @@ function closeShareModal() {
   _shareReminderId = null;
 }
 
-// Compartilha = cria uma CÓPIA do lembrete no documento privado do destinatário.
-// Cada um passa a ter sua própria versão independente.
-function shareReminderWith(targetUid, targetEmail) {
+// Confirma o compartilhamento: move o lembrete para o documento COMPARTILHADO,
+// registrando os destinatários e iniciando o histórico de edições.
+function confirmShare() {
   const original = state.lembretes.find(x => x.id === _shareReminderId);
-  if (!original || !db) return;
+  if (!original) return;
 
-  const docRef = db.collection(PRIVATE_COLLECTION).doc(targetUid);
+  const all = qs('#share-check-all')?.checked;
+  let targets = [];   // lista de emails destinatários (além do dono)
+  if (all) {
+    targets = usersDirectory.map(u => u.email);
+  } else {
+    qsa('.share-check-user:checked').forEach(cb => targets.push(cb.dataset.email));
+  }
 
-  // Lê o documento privado do destinatário, adiciona o lembrete copiado e salva.
-  docRef.get().then(snap => {
-    const data = snap.exists ? snap.data() : { lembretes: [] };
-    const lembretesDest = data.lembretes || [];
+  if (!all && !targets.length) { toast('Selecione ao menos um usuário.','warn'); return; }
 
-    // cópia com novo id, marcada como recebida e de quem veio
-    const copia = {
-      ...original,
-      id: uid(),
-      done: false,
-      sharedBy: currentUser.email,
-      receivedAt: Date.now()
-    };
-    lembretesDest.push(copia);
+  // Cria o lembrete compartilhado (versão única e sincronizada)
+  const shared = {
+    ...original,
+    sharedWithAll: !!all,
+    sharedWith: all ? [] : targets,   // vazio = todos
+    owner: currentUser.email,
+    history: [{
+      action: 'Compartilhou',
+      by: currentUser.email,
+      at: Date.now()
+    }]
+  };
 
-    return docRef.set({ ...data, lembretes: lembretesDest, updatedAt: Date.now() }, { merge: true });
-  }).then(() => {
-    closeShareModal();
-    toast(`📤 Lembrete enviado para ${targetEmail}!`, 'success');
-  }).catch(err => {
-    console.error('Erro ao compartilhar:', err);
-    toast('⚠️ Não foi possível compartilhar. Verifique as permissões.', 'error');
-  });
+  state.lembretesCompartilhados.push(shared);
+  // remove do privado (virou compartilhado)
+  state.lembretes = state.lembretes.filter(x => x.id !== _shareReminderId);
+
+  saveDB();           // salva o privado (sem o lembrete movido)
+  saveSharedRem();    // salva o compartilhado (com o novo)
+  closeShareModal();
+  renderLembretes();
+  renderPostIts();
+  updateBadges();
+  toast(all ? '📤 Compartilhado com todos!' : `📤 Compartilhado com ${targets.length} usuário(s)!`, 'success');
+}
+
+// Verifica se o usuário atual pode ver um lembrete compartilhado
+function canSeeShared(l) {
+  if (l.sharedWithAll) return true;
+  if (l.owner === currentUser?.email) return true;
+  return (l.sharedWith || []).includes(currentUser?.email);
+}
+
+// Registra uma entrada no histórico de um lembrete compartilhado
+function addSharedHistory(l, action) {
+  if (!l.history) l.history = [];
+  l.history.push({ action, by: currentUser.email, at: Date.now() });
+}
+
+// Abre o modal de histórico de edições de um lembrete compartilhado
+function openHistoryModal(id) {
+  const l = state.lembretesCompartilhados.find(x => x.id === id);
+  if (!l) return;
+  qs('#history-reminder-title').textContent = l.title;
+  const body = qs('#history-list-body');
+  const hist = [...(l.history||[])].reverse();
+  if (!hist.length) {
+    body.innerHTML = '<div class="empty-state" style="padding:16px">Sem histórico.</div>';
+  } else {
+    body.innerHTML = hist.map(h => {
+      const d = new Date(h.at);
+      return `<div class="history-entry">
+        <span class="history-action">${escHtml(h.action)}</span>
+        <span class="history-by">👤 ${escHtml(h.by)}</span>
+        <span class="history-at">${fmtDate(d)} ${fmtTime(d)}</span>
+      </div>`;
+    }).join('');
+  }
+  show(qs('#modal-history'));
 }
 
 /* ═══════════════════════════════════════════════
@@ -1137,29 +1245,41 @@ function saveLembrete() {
   if (!title||!date||!time) { toast('Preencha título, data e hora','warn'); return; }
 
   const editId=qs('#rem-edit-id').value;
+  const isSharedEdit = qs('#rem-edit-shared').value === '1';
   const item = {
     title, date, time,
     desc:       qs('#rem-desc').value.trim(),
     priority:   qs('#rem-priority').value,
     recurrence: qs('#rem-recurrence').value,
     alarm:      qs('#rem-alarm').checked,
-    done:       false,
-    createdAt:  Date.now(),
   };
 
-  if (editId) {
+  if (editId && isSharedEdit) {
+    // editar lembrete COMPARTILHADO — registra no histórico
+    const idx=state.lembretesCompartilhados.findIndex(l=>l.id===editId);
+    if (idx>-1) {
+      state.lembretesCompartilhados[idx]={...state.lembretesCompartilhados[idx],...item};
+      addSharedHistory(state.lembretesCompartilhados[idx], 'Editou');
+      saveSharedRem();
+    }
+    toast('✅ Lembrete compartilhado atualizado!','success');
+  } else if (editId) {
+    // editar lembrete PRIVADO
     const idx=state.lembretes.findIndex(l=>l.id===editId);
     if (idx>-1) state.lembretes[idx]={...state.lembretes[idx],...item};
+    saveDB();
     toast('✅ Lembrete atualizado!','success');
   } else {
-    state.lembretes.push({ id:uid(), snoozed:false, ...item });
+    // novo lembrete (sempre privado)
+    state.lembretes.push({ id:uid(), snoozed:false, done:false, createdAt:Date.now(), ...item });
+    saveDB();
     toast('✅ Lembrete cadastrado!','success');
   }
-  saveDB(); resetRemForm(); renderLembretes(); scheduleAllAlarms(); updateBadges(); updateListCounts();
+  resetRemForm(); renderLembretes(); scheduleAllAlarms(); updateBadges(); updateListCounts();
 }
 
 function resetRemForm() {
-  qs('#rem-edit-id').value=''; qs('#rem-form-title').textContent='Novo lembrete';
+  qs('#rem-edit-id').value=''; qs('#rem-edit-shared').value=''; qs('#rem-form-title').textContent='Novo lembrete';
   qs('#rem-title').value=''; qs('#rem-desc').value=''; qs('#rem-priority').value='media';
   qs('#rem-recurrence').value='none'; qs('#rem-alarm').checked=true;
   const now=nowBrasilia();
@@ -1169,10 +1289,17 @@ function resetRemForm() {
 
 function renderLembretes() {
   const list=qs('#rem-list');
-  let items=[...state.lembretes].sort((a,b)=>{
+
+  // Une privados + compartilhados que o usuário pode ver, marcando o tipo
+  const privados = state.lembretes.map(l => ({ ...l, _shared:false }));
+  const compart  = state.lembretesCompartilhados
+    .filter(canSeeShared)
+    .map(l => ({ ...l, _shared:true }));
+  let items = [...privados, ...compart].sort((a,b)=>{
     const da=new Date(`${a.date}T${a.time}`), db=new Date(`${b.date}T${b.time}`);
     return da-db;
   });
+
   if (activeRemFilter==='pending') items=items.filter(l=>!l.done);
   if (activeRemFilter==='done')    items=items.filter(l=>l.done);
 
@@ -1184,11 +1311,23 @@ function renderLembretes() {
     const isOverdue=!l.done && dt.getTime()<now;
     const prioLabel={baixa:'🟢 Baixa',media:'🟡 Média',alta:'🟠 Alta',urgente:'🔴 Urgente'}[l.priority]||'';
     const recLabel={none:'',daily:'🔁 Diária',weekly:'🔁 Semanal',workdays:'🔁 Dias úteis'}[l.recurrence]||'';
-    return `<div class="rem-card prio-${l.priority} ${l.done?'done':''} ${isOverdue?'overdue':''}" data-id="${l.id}">
+
+    // info de compartilhamento
+    let shareInfo = '';
+    if (l._shared) {
+      const alvo = l.sharedWithAll ? 'todos' : `${(l.sharedWith||[]).length} usuário(s)`;
+      const ehDono = l.owner === currentUser?.email;
+      shareInfo = `<span class="rem-meta-pill" style="color:var(--cyan)">🔗 Compartilhado (${alvo})</span>`
+        + (ehDono ? '' : `<span class="rem-meta-pill" style="color:var(--violet)">de ${escHtml(l.owner)}</span>`);
+    }
+
+    return `<div class="rem-card prio-${l.priority} ${l.done?'done':''} ${isOverdue?'overdue':''} ${l._shared?'rem-shared':''}" data-id="${l.id}" data-shared="${l._shared}">
       <div class="rem-card-top">
-        <div class="rem-card-title">${l.done?'✓ ':''}${escHtml(l.title)}</div>
+        <div class="rem-card-title">${l._shared?'🔗 ':''}${l.done?'✓ ':''}${escHtml(l.title)}</div>
         <div class="rem-card-actions">
-          <button class="action-btn rem-btn-share" title="Compartilhar com outro usuário">📤</button>
+          ${l._shared
+            ? `<button class="action-btn rem-btn-history" title="Histórico de edições">🕓</button>`
+            : `<button class="action-btn rem-btn-share" title="Compartilhar">📤</button>`}
           <button class="action-btn rem-btn-done" title="${l.done?'Reabrir':'Concluir'}">${l.done?'↩':'✓'}</button>
           <button class="action-btn rem-btn-edit" title="Editar">✏️</button>
           <button class="action-btn btn-delete delete-btn rem-btn-del" title="Deletar">🗑</button>
@@ -1201,27 +1340,38 @@ function renderLembretes() {
         ${recLabel ? `<span class="rem-meta-pill">${recLabel}</span>` : ''}
         ${l.alarm ? `<span class="rem-meta-pill">🔔</span>` : ''}
         ${isOverdue ? `<span class="rem-meta-pill" style="color:var(--red)">⚠️ Vencido</span>` : ''}
-        ${l.sharedBy ? `<span class="rem-meta-pill" style="color:var(--violet)">📥 de ${escHtml(l.sharedBy)}</span>` : ''}
+        ${shareInfo}
       </div>
     </div>`;
   }).join('');
 
-  // eventos
+  // helper: acha o lembrete (privado ou compartilhado) e a lista correspondente
+  function findRem(id, isShared) {
+    if (isShared) return state.lembretesCompartilhados.find(x=>x.id===id);
+    return state.lembretes.find(x=>x.id===id);
+  }
+
   qsa('.rem-btn-done').forEach(btn=>{
     btn.addEventListener('click',()=>{
-      const id=btn.closest('.rem-card').dataset.id;
-      const l=state.lembretes.find(x=>x.id===id); if(!l) return;
-      l.done=!l.done; saveDB(); renderLembretes(); updateBadges();
+      const card=btn.closest('.rem-card');
+      const id=card.dataset.id, isShared=card.dataset.shared==='true';
+      const l=findRem(id,isShared); if(!l) return;
+      l.done=!l.done;
+      if (isShared) { addSharedHistory(l, l.done?'Concluiu':'Reabriu'); saveSharedRem(); }
+      else saveDB();
+      renderLembretes(); updateBadges();
       toast(l.done?'✓ Lembrete concluído!':'↩ Lembrete reaberto','info');
-      if (l.done && l.recurrence!=='none') scheduleRecurrence(l);
+      if (l.done && l.recurrence!=='none' && !isShared) scheduleRecurrence(l);
     });
   });
   qsa('.rem-btn-edit').forEach(btn=>{
     btn.addEventListener('click',()=>{
-      const id=btn.closest('.rem-card').dataset.id;
-      const l=state.lembretes.find(x=>x.id===id); if(!l) return;
+      const card=btn.closest('.rem-card');
+      const id=card.dataset.id, isShared=card.dataset.shared==='true';
+      const l=findRem(id,isShared); if(!l) return;
       qs('#rem-edit-id').value=id;
-      qs('#rem-form-title').textContent='Editar lembrete';
+      qs('#rem-edit-shared').value=isShared?'1':'';
+      qs('#rem-form-title').textContent= isShared?'Editar lembrete compartilhado':'Editar lembrete';
       qs('#rem-title').value=l.title;
       qs('#rem-desc').value=l.desc||'';
       qs('#rem-date').value=l.date;
@@ -1234,10 +1384,12 @@ function renderLembretes() {
   });
   qsa('.rem-btn-del').forEach(btn=>{
     btn.addEventListener('click',()=>{
-      const id=btn.closest('.rem-card').dataset.id;
-      if (!confirm('Excluir lembrete?')) return;
-      state.lembretes=state.lembretes.filter(x=>x.id!==id);
-      saveDB(); renderLembretes(); scheduleAllAlarms(); updateBadges(); updateListCounts();
+      const card=btn.closest('.rem-card');
+      const id=card.dataset.id, isShared=card.dataset.shared==='true';
+      if (!confirm(isShared?'Excluir lembrete compartilhado? (será removido para todos)':'Excluir lembrete?')) return;
+      if (isShared) { state.lembretesCompartilhados=state.lembretesCompartilhados.filter(x=>x.id!==id); saveSharedRem(); }
+      else { state.lembretes=state.lembretes.filter(x=>x.id!==id); saveDB(); }
+      renderLembretes(); scheduleAllAlarms(); updateBadges(); updateListCounts();
       toast('🗑 Lembrete removido','info');
     });
   });
@@ -1247,13 +1399,23 @@ function renderLembretes() {
       openShareModal(id);
     });
   });
+  qsa('.rem-btn-history').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const id=btn.closest('.rem-card').dataset.id;
+      openHistoryModal(id);
+    });
+  });
 }
 
 /* ── ALARMES ── */
 function scheduleAllAlarms() {
   alarmTimers.forEach(clearTimeout); alarmTimers=[];
   const now=Date.now();
-  state.lembretes.filter(l=>!l.done && l.alarm).forEach(l=>{
+  const todos = [
+    ...state.lembretes,
+    ...state.lembretesCompartilhados.filter(canSeeShared)
+  ];
+  todos.filter(l=>!l.done && l.alarm).forEach(l=>{
     const dt=new Date(`${l.date}T${l.time}`).getTime();
     const diff=dt-now;
     if (diff>0 && diff<24*60*60*1000) {
@@ -1265,7 +1427,7 @@ function scheduleAllAlarms() {
 
 let _currentAlarmId=null;
 function fireAlarm(id) {
-  const l=state.lembretes.find(x=>x.id===id); if(!l||l.done) return;
+  const l=state.lembretes.find(x=>x.id===id) || state.lembretesCompartilhados.find(x=>x.id===id); if(!l||l.done) return;
   _currentAlarmId=id;
   qs('#alarm-title').textContent=l.title;
   qs('#alarm-desc').textContent=l.desc||'';
@@ -1429,7 +1591,7 @@ function renderListContent() {
    BADGES
    ═══════════════════════════════════════════════ */
 function updateBadges() {
-  const pending=state.lembretes.filter(l=>!l.done).length;
+  const pending=[...state.lembretes, ...state.lembretesCompartilhados.filter(canSeeShared)].filter(l=>!l.done).length;
   const badge=qs('#reminder-badge');
   if (pending>0) { badge.textContent=pending; show(badge); } else hide(badge);
 
@@ -1528,7 +1690,7 @@ function closeMobileMenu() {
 
 // Sincronizar badge mobile com desktop
 function updateMobileBadges() {
-  const remPending = state.lembretes.filter(l=>!l.done).length;
+  const remPending = [...state.lembretes, ...state.lembretesCompartilhados.filter(canSeeShared)].filter(l=>!l.done).length;
   const total = remPending;
   const mb = qs('#mobile-badge-count');
   if (mb) { mb.textContent=total; mb.style.display=total>0?'block':'none'; }
@@ -1588,7 +1750,7 @@ function renderPostIts() {
 
   const now = Date.now();
   // mostrar apenas não concluídos, ordenados por data
-  const pending = [...state.lembretes]
+  const pending = [...state.lembretes, ...state.lembretesCompartilhados.filter(canSeeShared)]
     .filter(l => !l.done)
     .sort((a,b) => new Date(`${a.date}T${a.time}`) - new Date(`${b.date}T${b.time}`));
 
@@ -1623,10 +1785,14 @@ function renderPostIts() {
     btn.addEventListener('click', e => {
       e.stopPropagation();
       const id = btn.dataset.id;
-      const l  = state.lembretes.find(x=>x.id===id);
+      const priv = state.lembretes.find(x=>x.id===id);
+      const shar = state.lembretesCompartilhados.find(x=>x.id===id);
+      const l = priv || shar;
       if (!l) return;
       l.done = true;
-      saveDB(); renderPostIts(); updateBadges(); updateMobileBadges();
+      if (shar) { addSharedHistory(l, 'Concluiu'); saveSharedRem(); }
+      else saveDB();
+      renderPostIts(); renderLembretes(); updateBadges(); updateMobileBadges();
       toast('✓ Lembrete concluído!','success');
     });
   });
@@ -1720,7 +1886,7 @@ function openLinksModal() {
 }
 function saveLink() {
   const url=qs('#link-url').value.trim(), desc=qs('#link-desc').value.trim();
-  if (!url||!desc) { toast('Preencha link e descrição','warn'); return; }
+  if (!url||!desc) { toast('Preencha nome e link','warn'); return; }
   const editId=qs('#link-edit-id').value;
   const item = { url, desc, updatedAt: Date.now() };
   if (editId) {
@@ -1805,6 +1971,9 @@ function savePrograma() {
     nome,
     onedrive: qs('#prog-onedrive').value.trim(),
     manual:   qs('#prog-manual').innerHTML,
+    fileUrl:        qs('#prog-file-url').value || '',
+    fileName:       qs('#prog-file-name').textContent || '',
+    fileStoredName: qs('#prog-file-stored-name').value || '',
     updatedAt: Date.now()
   };
   if (editId) {
@@ -1820,7 +1989,80 @@ function savePrograma() {
 function resetProgForm() {
   qs('#prog-edit-id').value=''; qs('#prog-form-title').textContent='Novo programa';
   qs('#prog-nome').value=''; qs('#prog-onedrive').value=''; qs('#prog-manual').innerHTML='';
+  // limpar campos de arquivo
+  qs('#prog-file-url').value=''; qs('#prog-file-stored-name').value='';
+  qs('#prog-file-name').textContent='';
+  hide(qs('#prog-file-attached'));
+  show(qs('#prog-file-btn'));
+  hide(qs('#prog-file-progress'));
 }
+
+// ── UPLOAD DE ARQUIVO PARA O FIREBASE STORAGE ──
+function handleProgFileSelect(file) {
+  if (!file) return;
+  if (!storage) { toast('Storage não disponível. Verifique o Firebase.','error'); return; }
+
+  // Limite de segurança: 20 MB
+  if (file.size > 20 * 1024 * 1024) {
+    toast('Arquivo muito grande (máx. 20 MB).','warn');
+    return;
+  }
+
+  const storedName = `${uid()}_${file.name}`;
+  const ref = storage.ref(`programas/${storedName}`);
+
+  hide(qs('#prog-file-btn'));
+  show(qs('#prog-file-progress'));
+  qs('#prog-file-bar').style.width = '0%';
+
+  const task = ref.put(file);
+  task.on('state_changed',
+    snap => {
+      const pct = (snap.bytesTransferred / snap.totalBytes) * 100;
+      qs('#prog-file-bar').style.width = pct + '%';
+    },
+    err => {
+      console.error('Erro no upload:', err);
+      toast('⚠️ Erro ao enviar arquivo.','error');
+      hide(qs('#prog-file-progress'));
+      show(qs('#prog-file-btn'));
+    },
+    () => {
+      task.snapshot.ref.getDownloadURL().then(url => {
+        qs('#prog-file-url').value = url;
+        qs('#prog-file-stored-name').value = storedName;
+        qs('#prog-file-name').textContent = file.name;
+        hide(qs('#prog-file-progress'));
+        show(qs('#prog-file-attached'));
+        toast('📎 Arquivo anexado!','success');
+      });
+    }
+  );
+}
+
+// Remove o arquivo anexado do formulário (e do Storage se já foi enviado)
+function removeProgFile() {
+  const storedName = qs('#prog-file-stored-name').value;
+  if (storedName && storage) {
+    storage.ref(`programas/${storedName}`).delete().catch(()=>{});
+  }
+  qs('#prog-file-url').value='';
+  qs('#prog-file-stored-name').value='';
+  qs('#prog-file-name').textContent='';
+  hide(qs('#prog-file-attached'));
+  show(qs('#prog-file-btn'));
+}
+
+// Ícone conforme a extensão do arquivo
+function fileIcon(name) {
+  const ext = (name||'').split('.').pop().toLowerCase();
+  if (['doc','docx'].includes(ext)) return '📘';
+  if (['xls','xlsx'].includes(ext)) return '📗';
+  if (['ppt','pptx'].includes(ext)) return '📙';
+  if (ext === 'pdf') return '📕';
+  return '📎';
+}
+
 function renderProgramas() {
   const list=qs('#prog-list');
   const query=(qs('#prog-search').value||'').trim().toLowerCase();
@@ -1834,6 +2076,7 @@ function renderProgramas() {
         <div class="rem-card-title">💿 ${escHtml(p.nome)}</div>
         <div class="rem-card-actions">
           ${p.manual ? `<button class="action-btn prog-btn-view" title="Ver manual">👁</button>` : ''}
+          ${p.fileUrl ? `<button class="action-btn prog-btn-file" title="Baixar arquivo">📎</button>` : ''}
           ${p.onedrive ? `<button class="action-btn prog-btn-down" title="Abrir OneDrive">⬇</button>` : ''}
           <button class="action-btn prog-btn-edit" title="Editar">✏️</button>
           <button class="action-btn btn-delete delete-btn prog-btn-del" title="Deletar">🗑</button>
@@ -1841,7 +2084,8 @@ function renderProgramas() {
       </div>
       <div class="rem-card-meta">
         ${p.onedrive ? `<span class="rem-meta-pill">☁️ <a href="${escHtml(p.onedrive)}" target="_blank" style="color:var(--cyan)">OneDrive</a></span>` : ''}
-        ${p.manual ? `<span class="rem-meta-pill">📄 Manual disponível</span>` : ''}
+        ${p.fileUrl ? `<span class="rem-meta-pill">${fileIcon(p.fileName)} <a href="${escHtml(p.fileUrl)}" target="_blank" style="color:var(--green)">${escHtml(truncate(p.fileName||'arquivo',28))}</a></span>` : ''}
+        ${p.manual ? `<span class="rem-meta-pill">📄 Manual</span>` : ''}
       </div>
     </div>
   `).join('');
@@ -1851,6 +2095,13 @@ function renderProgramas() {
       const id=btn.closest('.rem-card').dataset.id;
       const p=state.programas.find(x=>x.id===id); if(!p) return;
       openProgManual(p);
+    });
+  });
+  qsa('.prog-btn-file').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const id=btn.closest('.rem-card').dataset.id;
+      const p=state.programas.find(x=>x.id===id); if(!p||!p.fileUrl) return;
+      window.open(p.fileUrl,'_blank','noopener');
     });
   });
   qsa('.prog-btn-down').forEach(btn=>{
@@ -1869,6 +2120,18 @@ function renderProgramas() {
       qs('#prog-nome').value=p.nome;
       qs('#prog-onedrive').value=p.onedrive||'';
       qs('#prog-manual').innerHTML=p.manual||'';
+      // restaurar arquivo anexado
+      if (p.fileUrl) {
+        qs('#prog-file-url').value=p.fileUrl;
+        qs('#prog-file-stored-name').value=p.fileStoredName||'';
+        qs('#prog-file-name').textContent=p.fileName||'arquivo';
+        show(qs('#prog-file-attached'));
+        hide(qs('#prog-file-btn'));
+      } else {
+        qs('#prog-file-url').value=''; qs('#prog-file-stored-name').value='';
+        qs('#prog-file-name').textContent='';
+        hide(qs('#prog-file-attached')); show(qs('#prog-file-btn'));
+      }
       qs('#prog-nome').scrollIntoView({behavior:'smooth'});
     });
   });
@@ -1876,6 +2139,11 @@ function renderProgramas() {
     btn.addEventListener('click',()=>{
       const id=btn.closest('.rem-card').dataset.id;
       if (!confirm('Excluir programa?')) return;
+      const p=state.programas.find(x=>x.id===id);
+      // remover arquivo do Storage também
+      if (p && p.fileStoredName && storage) {
+        storage.ref(`programas/${p.fileStoredName}`).delete().catch(()=>{});
+      }
       state.programas=state.programas.filter(x=>x.id!==id);
       saveDB(); renderProgramas(); updateListCounts();
       toast('🗑 Programa removido','info');
@@ -1886,10 +2154,11 @@ function renderProgramas() {
 // Abre o manual de instalação num modal de leitura (reusa o modal de tutorial)
 function openProgManual(p) {
   qs('#view-tutorial-title').textContent = `💿 ${p.nome}`;
-  qs('#view-tutorial-meta').innerHTML = p.onedrive
-    ? `<span class="badge badge-tutorial">☁️ <a href="${escHtml(p.onedrive)}" target="_blank" style="color:inherit">Baixar no OneDrive</a></span>`
-    : '';
-  qs('#view-tutorial-body').innerHTML = p.manual || '<p style="color:var(--text-muted)">Sem manual cadastrado.</p>';
+  let meta = '';
+  if (p.onedrive) meta += `<span class="badge badge-tutorial">☁️ <a href="${escHtml(p.onedrive)}" target="_blank" style="color:inherit">OneDrive</a></span>`;
+  if (p.fileUrl)  meta += `<span class="badge badge-tutorial">${fileIcon(p.fileName)} <a href="${escHtml(p.fileUrl)}" target="_blank" style="color:inherit">${escHtml(p.fileName||'arquivo')}</a></span>`;
+  qs('#view-tutorial-meta').innerHTML = meta;
+  qs('#view-tutorial-body').innerHTML = p.manual || '<p style="color:var(--text-muted)">Sem manual em texto. Veja o arquivo anexado acima.</p>';
   qs('#btn-open-new-tab').style.display = 'none';
   qs('#btn-open-email-outlook').style.display = 'none';
   show(qs('#modal-view-tutorial'));

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SupportBase — Central de Conhecimento</title>
-  <link rel="stylesheet" href="style.css?v=13" />
+  <link rel="stylesheet" href="style.css?v=14" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 </head>
@@ -59,10 +59,16 @@
 
     <!-- DESKTOP NAV -->
     <nav class="header-actions desktop-nav">
-      <button class="btn-ghost" id="btn-open-register"><span class="icon">＋</span> Cadastrar</button>
-      <button class="btn-ghost" id="btn-open-contatos"><span class="icon">📇</span> Contatos</button>
-      <button class="btn-ghost" id="btn-open-links"><span class="icon">🔗</span> Links</button>
-      <button class="btn-ghost" id="btn-open-programas"><span class="icon">💿</span> Programas</button>
+      <!-- Menu Cadastrar (dropdown) -->
+      <div class="header-dropdown">
+        <button class="btn-ghost" id="btn-cadastrar-menu"><span class="icon">＋</span> Cadastrar ▾</button>
+        <div class="header-dropdown-menu" id="cadastrar-dropdown" style="display:none">
+          <button class="header-dropdown-item" id="btn-open-register">📝 Texto / Tutorial</button>
+          <button class="header-dropdown-item" id="btn-open-contatos">📇 Contato</button>
+          <button class="header-dropdown-item" id="btn-open-links">🔗 Link</button>
+          <button class="header-dropdown-item" id="btn-open-programas">💿 Programa</button>
+        </div>
+      </div>
       <button class="btn-ghost btn-reminders" id="btn-open-reminders">
         🔔 Lembretes<span class="badge-count" id="reminder-badge" style="display:none"></span>
       </button>
@@ -125,9 +131,12 @@
     <p class="hero-eyebrow">Central de Conhecimento</p>
     <h1 class="hero-title">O que você precisa agora?</h1>
     <div class="search-tabs">
-      <button class="tab-btn active" data-type="textos"><span>📝</span> Textos</button>
+      <button class="tab-btn active" data-type="todos"><span>🔍</span> Tudo</button>
+      <button class="tab-btn" data-type="textos"><span>📝</span> Textos</button>
       <button class="tab-btn" data-type="tutoriais"><span>📘</span> Tutoriais</button>
-      <button class="tab-btn" data-type="todos"><span>🔍</span> Todos</button>
+      <button class="tab-btn" data-type="contatos"><span>📇</span> Contatos</button>
+      <button class="tab-btn" data-type="links"><span>🔗</span> Links</button>
+      <button class="tab-btn" data-type="programas"><span>💿</span> Programas</button>
     </div>
     <div class="search-wrapper">
       <span class="search-icon">🔎</span>
@@ -620,6 +629,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
 <script src="firebase-config.js"></script>
-<script src="app.js?v=13"></script>
+<script src="app.js?v=14"></script>
 </body>
 </html>

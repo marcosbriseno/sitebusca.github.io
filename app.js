@@ -394,6 +394,24 @@ function bindEvents() {
   /* ── LOGOUT ── */
   qs('#btn-logout').addEventListener('click', doLogout);
 
+  /* ── DROPDOWN CADASTRAR (header) ── */
+  qs('#btn-cadastrar-menu').addEventListener('click', e => {
+    e.stopPropagation();
+    const dd = qs('#cadastrar-dropdown');
+    dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
+  });
+  // fecha o dropdown ao clicar fora
+  document.addEventListener('click', e => {
+    const dd = qs('#cadastrar-dropdown');
+    if (dd && dd.style.display === 'block' && !e.target.closest('.header-dropdown')) {
+      dd.style.display = 'none';
+    }
+  });
+  // fecha o dropdown ao escolher qualquer opção
+  qsa('#cadastrar-dropdown .header-dropdown-item').forEach(item => {
+    item.addEventListener('click', () => { qs('#cadastrar-dropdown').style.display = 'none'; });
+  });
+
   /* ── MENU HAMBURGER MOBILE ── */
   qs('#hamburger-btn').addEventListener('click', toggleMobileMenu);
   qs('#mobile-menu-overlay').addEventListener('click', closeMobileMenu);
@@ -637,14 +655,24 @@ function doSearch() {
   const query = qs('#search-input').value.trim().toLowerCase();
   if (!query) { clearSearch(); return; }
 
+  const all = activeType === 'todos';
   let pool = [];
-  if (activeType === 'textos'   || activeType === 'todos') pool.push(...state.textos.map(t => ({ ...t, kind: 'texto' })));
-  if (activeType === 'tutoriais'|| activeType === 'todos') pool.push(...state.tutoriais.map(t => ({ ...t, kind: 'tutorial' })));
+  if (activeType === 'textos'    || all) pool.push(...state.textos.map(t => ({ ...t, kind: 'texto' })));
+  if (activeType === 'tutoriais' || all) pool.push(...state.tutoriais.map(t => ({ ...t, kind: 'tutorial' })));
+  if (activeType === 'contatos'  || all) pool.push(...state.contatos.map(t => ({ ...t, kind: 'contato' })));
+  if (activeType === 'links'     || all) pool.push(...state.links.map(t => ({ ...t, kind: 'link' })));
+  if (activeType === 'programas' || all) pool.push(...state.programas.map(t => ({ ...t, kind: 'programa' })));
+
+  // filtro de categoria só se aplica a textos/tutoriais
   if (activeCategory) pool = pool.filter(i => (i.category||'').toLowerCase() === activeCategory.toLowerCase());
 
   const words = query.split(/\s+/);
   const scored = pool.map(item => {
-    const hay = [item.keyword||'', item.title||'', item.category||''].join(' ').toLowerCase();
+    // campos pesquisáveis variam conforme o tipo
+    const hay = [
+      item.keyword||'', item.title||'', item.category||'',
+      item.nome||'', item.desc||'', item.telefone||'', item.teams||'', item.url||''
+    ].join(' ').toLowerCase();
     let score = 0;
     for (const w of words) {
       if (hay.includes(w)) score += 2;
@@ -680,6 +708,72 @@ function showResults(items, query) {
 function renderCard(item, query='') {
   const kind = item.kind;
   const isFav = !!favorites[item.id];
+
+  // ── CONTATO ──
+  if (kind === 'contato') {
+    const nome = highlight(escHtml(item.nome||''), query);
+    const meta = [];
+    if (item.telefone) meta.push(`📞 ${escHtml(item.telefone)}`);
+    if (item.teams)    meta.push(`💬 ${escHtml(item.teams)}`);
+    return `
+    <div class="result-card" data-id="${item.id}" data-kind="contato" tabindex="0" role="button">
+      <div class="card-top">
+        <div class="card-badges"><span class="badge badge-contato">📇 Contato</span></div>
+        <div class="card-actions">
+          <button class="action-btn btn-fav ${isFav?'fav-active':''}">${isFav?'⭐':'☆'}</button>
+          <button class="action-btn btn-edit">✏️</button>
+          <button class="action-btn btn-delete delete-btn">🗑</button>
+        </div>
+      </div>
+      <div class="card-keyword">👤 ${nome}</div>
+      <div class="card-desc">${meta.join('  ·  ') || 'Sem dados de contato'}</div>
+      <div class="card-footer"><span class="copy-hint">👆 Clique para abrir contato</span></div>
+    </div>`;
+  }
+
+  // ── LINK ──
+  if (kind === 'link') {
+    const nome = highlight(escHtml(item.desc||''), query);
+    return `
+    <div class="result-card" data-id="${item.id}" data-kind="link" tabindex="0" role="button">
+      <div class="card-top">
+        <div class="card-badges"><span class="badge badge-link">🔗 Link</span></div>
+        <div class="card-actions">
+          <button class="action-btn btn-fav ${isFav?'fav-active':''}">${isFav?'⭐':'☆'}</button>
+          <button class="action-btn btn-edit">✏️</button>
+          <button class="action-btn btn-delete delete-btn">🗑</button>
+        </div>
+      </div>
+      <div class="card-keyword">🔗 ${nome}</div>
+      <div class="card-desc">${highlight(escHtml(truncate(item.url||'',80)), query)}</div>
+      <div class="card-footer"><span class="copy-hint">👆 Clique para abrir o link</span></div>
+    </div>`;
+  }
+
+  // ── PROGRAMA ──
+  if (kind === 'programa') {
+    const nome = highlight(escHtml(item.nome||''), query);
+    const recursos = [];
+    if (item.manual)   recursos.push('📄 Manual');
+    if (item.fileUrl)  recursos.push(`${fileIcon(item.fileName)} Arquivo`);
+    if (item.onedrive) recursos.push('☁️ OneDrive');
+    return `
+    <div class="result-card" data-id="${item.id}" data-kind="programa" tabindex="0" role="button">
+      <div class="card-top">
+        <div class="card-badges"><span class="badge badge-programa">💿 Programa</span></div>
+        <div class="card-actions">
+          <button class="action-btn btn-fav ${isFav?'fav-active':''}">${isFav?'⭐':'☆'}</button>
+          <button class="action-btn btn-edit">✏️</button>
+          <button class="action-btn btn-delete delete-btn">🗑</button>
+        </div>
+      </div>
+      <div class="card-keyword">💿 ${nome}</div>
+      <div class="card-desc">${recursos.join('  ·  ') || 'Sem recursos cadastrados'}</div>
+      <div class="card-footer"><span class="copy-hint">👆 Clique para ver detalhes</span></div>
+    </div>`;
+  }
+
+  // ── TEXTO / TUTORIAL (padrão) ──
   const text = item.description || item.desc || '';
   const hasPlaceholders = kind==='texto' && /\{[^}]+\}/.test(text);
   const typeIcon = kind==='texto' ? '📝' : getTutorialIcon(item.tutorialType||item.type);
@@ -718,13 +812,38 @@ function handleCardClick(id, kind) {
     const autoPhs = extractPlaceholders(text).filter(p => isAutoPlaceholder(p));
     if (phs.length > 0 || autoPhs.length > 0) openPlaceholderModal(item, text, extractPlaceholders(text));
     else finalizeCopy(id, text);
-  } else {
+  } else if (kind === 'tutorial') {
     const item = state.tutoriais.find(t => t.id===id); if (!item) return;
     currentTutorialId = id;
     incrementUse(id,'tutorial');
     addToHistory(item,'tutorial');
     openTutorialView(item);
+  } else if (kind === 'contato') {
+    const item = state.contatos.find(t => t.id===id); if (!item) return;
+    openContatoView(item);
+  } else if (kind === 'link') {
+    const item = state.links.find(t => t.id===id); if (!item) return;
+    if (item.url) window.open(item.url, '_blank', 'noopener');
+  } else if (kind === 'programa') {
+    const item = state.programas.find(t => t.id===id); if (!item) return;
+    openProgManual(item);
   }
+}
+
+// Mostra um contato com opções de ligar / abrir Teams
+function openContatoView(item) {
+  qs('#view-tutorial-title').textContent = `👤 ${item.nome}`;
+  let meta = '';
+  if (item.telefone) meta += `<span class="badge badge-tutorial">📞 <a href="tel:${escHtml((item.telefone||'').replace(/[^0-9+]/g,''))}" style="color:inherit">${escHtml(item.telefone)}</a></span>`;
+  if (item.teams)    meta += `<span class="badge badge-tutorial">💬 <a href="https://teams.microsoft.com/l/chat/0/0?users=${encodeURIComponent(item.teams)}" target="_blank" style="color:inherit">Teams</a></span>`;
+  qs('#view-tutorial-meta').innerHTML = meta || '<span class="empty-state">Sem dados de contato</span>';
+  qs('#view-tutorial-body').innerHTML = `
+    <p style="font-size:15px"><strong>Nome:</strong> ${escHtml(item.nome)}</p>
+    ${item.telefone ? `<p><strong>Telefone:</strong> ${escHtml(item.telefone)}</p>` : ''}
+    ${item.teams ? `<p><strong>Teams:</strong> ${escHtml(item.teams)}</p>` : ''}`;
+  qs('#btn-open-new-tab').style.display = 'none';
+  qs('#btn-open-email-outlook').style.display = 'none';
+  show(qs('#modal-view-tutorial'));
 }
 
 /* ═══════════════════════════════════════════════
@@ -773,6 +892,32 @@ function openModal(tab='texto') {
   setTimeout(() => qs('#texto-keyword').focus(), 80);
 }
 function openModalEdit(id, kind) {
+  // tipos com modal próprio: abre o modal correspondente já em modo edição
+  if (kind==='contato') {
+    openContatosModal();
+    setTimeout(()=>{ const c=state.contatos.find(x=>x.id===id); if(!c) return;
+      qs('#contato-edit-id').value=id; qs('#contato-form-title').textContent='Editar contato';
+      qs('#contato-nome').value=c.nome; qs('#contato-telefone').value=c.telefone||''; qs('#contato-teams').value=c.teams||'';
+    },150);
+    return;
+  }
+  if (kind==='link') {
+    openLinksModal();
+    setTimeout(()=>{ const l=state.links.find(x=>x.id===id); if(!l) return;
+      qs('#link-edit-id').value=id; qs('#link-form-title').textContent='Editar link';
+      qs('#link-desc').value=l.desc; qs('#link-url').value=l.url;
+    },150);
+    return;
+  }
+  if (kind==='programa') {
+    openProgramasModal();
+    setTimeout(()=>{ const p=state.programas.find(x=>x.id===id); if(!p) return;
+      qs('#prog-edit-id').value=id; qs('#prog-form-title').textContent='Editar programa';
+      qs('#prog-nome').value=p.nome; qs('#prog-onedrive').value=p.onedrive||''; qs('#prog-manual').innerHTML=p.manual||'';
+      if (p.fileUrl) { qs('#prog-file-url').value=p.fileUrl; qs('#prog-file-stored-name').value=p.fileStoredName||''; qs('#prog-file-name').textContent=p.fileName||'arquivo'; show(qs('#prog-file-attached')); hide(qs('#prog-file-btn')); }
+    },150);
+    return;
+  }
   clearForms(); qs('#modal-title-text').textContent = 'Editar';
   if (kind==='texto') {
     const item = state.textos.find(t => t.id===id); if (!item) return;
@@ -881,8 +1026,15 @@ function saveTutorial() {
 /* ── DELETE ── */
 function deleteItem(id, kind) {
   if (!confirm('Confirma exclusão?')) return;
-  if (kind==='texto')    state.textos    = state.textos.filter(t=>t.id!==id);
-  else                   state.tutoriais = state.tutoriais.filter(t=>t.id!==id);
+  if (kind==='texto')         state.textos    = state.textos.filter(t=>t.id!==id);
+  else if (kind==='tutorial') state.tutoriais = state.tutoriais.filter(t=>t.id!==id);
+  else if (kind==='contato')  state.contatos  = state.contatos.filter(t=>t.id!==id);
+  else if (kind==='link')     state.links     = state.links.filter(t=>t.id!==id);
+  else if (kind==='programa') {
+    const p=state.programas.find(x=>x.id===id);
+    if (p && p.fileStoredName && storage) storage.ref(`programas/${p.fileStoredName}`).delete().catch(()=>{});
+    state.programas = state.programas.filter(t=>t.id!==id);
+  }
   delete favorites[id];
   history = history.filter(h=>h.id!==id);
   saveDB(); saveFavs(); saveHistory();

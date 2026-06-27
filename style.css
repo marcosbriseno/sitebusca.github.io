@@ -294,15 +294,18 @@ body {
   color: var(--text-primary); margin-bottom: 28px; line-height: 1.2;
 }
 .search-tabs {
-  display: flex; gap: 8px; margin-bottom: 20px;
+  display: flex; gap: 6px; margin-bottom: 20px;
   background: var(--bg-surface); border: 1px solid var(--border);
   border-radius: var(--radius-xl); padding: 5px;
+  max-width: 100%; overflow-x: auto;
+  scrollbar-width: none;
 }
+.search-tabs::-webkit-scrollbar { display: none; }
 .tab-btn {
-  display: flex; align-items: center; gap: 6px; padding: 7px 18px;
+  display: flex; align-items: center; gap: 6px; padding: 7px 14px;
   border: none; border-radius: 20px; background: transparent;
   color: var(--text-secondary); font-family: var(--font-ui); font-size: 13px; font-weight: 500;
-  cursor: pointer; transition: all var(--transition);
+  cursor: pointer; transition: all var(--transition); white-space: nowrap; flex-shrink: 0;
 }
 .tab-btn:hover { color: var(--text-primary); }
 .tab-btn.active { background: var(--cyan); color: var(--bg-base); font-weight: 600; }
@@ -1081,3 +1084,37 @@ mark { background: rgba(189,147,249,0.28); color: var(--cyan); border-radius: 2p
 .history-action { font-size: 13px; font-weight: 600; color: var(--cyan); }
 .history-by { font-size: 12px; color: var(--text-secondary); }
 .history-at { font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); }
+
+/* ═══════════════════════════════════════════════
+   DROPDOWN "CADASTRAR" no header
+   ═══════════════════════════════════════════════ */
+.header-dropdown { position: relative; }
+.header-dropdown-menu {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 120;
+  min-width: 190px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-modal);
+  padding: 6px;
+  animation: slide-down-menu 0.15s ease;
+}
+.header-dropdown-item {
+  display: block; width: 100%; text-align: left;
+  padding: 10px 12px; background: transparent; border: none;
+  color: var(--text-primary); font-family: var(--font-ui); font-size: 14px;
+  cursor: pointer; border-radius: var(--radius-sm);
+  transition: background var(--transition);
+}
+.header-dropdown-item:hover { background: var(--bg-hover); }
+
+/* badges dos novos tipos de card na busca */
+.badge-contato  { background: rgba(56,189,248,0.14); color: var(--cyan); }
+.badge-link     { background: rgba(80,250,123,0.15); color: var(--green); }
+.badge-programa { background: rgba(255,121,198,0.14); color: var(--violet); }
+.result-card[data-kind="contato"]::before  { background: var(--cyan); }
+.result-card[data-kind="link"]::before     { background: var(--green); }
+.result-card[data-kind="programa"]::before { background: var(--violet); }
+.result-card[data-kind="contato"] .copy-hint,
+.result-card[data-kind="link"] .copy-hint,
+.result-card[data-kind="programa"] .copy-hint { color: var(--text-secondary); }

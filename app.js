@@ -733,7 +733,7 @@ function shareProgramOnTeams(id) {
   // copia para a área de transferência (com fallback para navegadores antigos)
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(link)
-      .then(() => toast('📋 Link copiado! Cole no Teams.', 'success'))
+      .then(() => toast('📋 Link copiado!', 'success'))
       .catch(() => fallbackCopy(link));
   } else {
     fallbackCopy(link);

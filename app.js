@@ -807,7 +807,7 @@ function renderCard(item, query='') {
       <div class="card-top">
         <div class="card-badges"><span class="badge badge-programa">💿 Programa</span></div>
         <div class="card-actions">
-          <button class="action-btn prog-share-teams" title="Copiar link para o Teams">📋</button>
+          <button class="action-btn prog-share-teams" title="Copiar link">📋</button>
           <button class="action-btn btn-edit">✏️</button>
           <button class="action-btn btn-delete delete-btn">🗑</button>
         </div>

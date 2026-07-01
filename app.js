@@ -733,7 +733,7 @@ function shareProgramOnTeams(id) {
   // copia para a área de transferência (com fallback para navegadores antigos)
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(link)
-      .then(() => toast('📋 Link copiado!', 'success'))
+      .then(() => toast('📋 Link copiado! Cole no Teams.', 'success'))
       .catch(() => fallbackCopy(link));
   } else {
     fallbackCopy(link);
@@ -807,7 +807,7 @@ function renderCard(item, query='') {
       <div class="card-top">
         <div class="card-badges"><span class="badge badge-programa">💿 Programa</span></div>
         <div class="card-actions">
-          <button class="action-btn prog-share-teams" title="Copiar link">📋</button>
+          <button class="action-btn prog-share-teams" title="Copiar link para o Teams">📋</button>
           <button class="action-btn btn-edit">✏️</button>
           <button class="action-btn btn-delete delete-btn">🗑</button>
         </div>
@@ -2280,6 +2280,8 @@ function fileIcon(name) {
   if (['xls','xlsx'].includes(ext)) return '📗';
   if (['ppt','pptx'].includes(ext)) return '📙';
   if (ext === 'pdf') return '📕';
+  if (['bat','cmd','ps1'].includes(ext)) return '⚙️';
+  if (ext === 'txt') return '📄';
   return '📎';
 }
 
@@ -2375,13 +2377,30 @@ function renderProgramas() {
 function openProgManual(p) {
   qs('#view-tutorial-title').textContent = `💿 ${p.nome}`;
   let meta = '';
-  if (p.onedrive) meta += `<span class="badge badge-tutorial">☁️ <a href="${escHtml(p.onedrive)}" target="_blank" style="color:inherit">OneDrive</a></span>`;
-  if (p.fileUrl)  meta += `<span class="badge badge-tutorial">${fileIcon(p.fileName)} <a href="${escHtml(p.fileUrl)}" target="_blank" style="color:inherit">${escHtml(p.fileName||'arquivo')}</a></span>`;
+  if (p.onedrive) meta += `<button class="badge badge-tutorial prog-copy-link" data-link="${escHtml(p.onedrive)}" title="Copiar link do OneDrive" style="cursor:pointer;border:none">☁️ OneDrive 📋</button>`;
+  if (p.fileUrl)  meta += `<button class="badge badge-tutorial prog-copy-link" data-link="${escHtml(p.fileUrl)}" title="Copiar link do arquivo" style="cursor:pointer;border:none">${fileIcon(p.fileName)} ${escHtml(p.fileName||'arquivo')} 📋</button>`;
   qs('#view-tutorial-meta').innerHTML = meta;
   qs('#view-tutorial-body').innerHTML = p.manual || '<p style="color:var(--text-muted)">Sem manual em texto. Veja o arquivo anexado acima.</p>';
   qs('#btn-open-new-tab').style.display = 'none';
   qs('#btn-open-email-outlook').style.display = 'none';
   show(qs('#modal-view-tutorial'));
+
+  // clicar no OneDrive ou no arquivo copia o link para a área de transferência
+  qsa('#view-tutorial-meta .prog-copy-link').forEach(btn => {
+    btn.addEventListener('click', () => copyLinkToClipboard(btn.dataset.link));
+  });
+}
+
+// Copia um link para a área de transferência (com fallback)
+function copyLinkToClipboard(link) {
+  if (!link) return;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(link)
+      .then(() => toast('📋 Link copiado!', 'success'))
+      .catch(() => fallbackCopy(link));
+  } else {
+    fallbackCopy(link);
+  }
 }
 
 /* ═══════════════════════════════════════════════

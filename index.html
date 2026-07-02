@@ -15,7 +15,7 @@
   <link rel="apple-touch-icon" href="apple-touch-icon.png" />
   <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
 
-  <link rel="stylesheet" href="style.css?v=23" />
+  <link rel="stylesheet" href="style.css?v=28" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 </head>
@@ -90,6 +90,7 @@
       <button class="btn-icon btn-reminders" id="btn-open-reminders" title="Lembretes">
         🔔<span class="badge-count" id="reminder-badge" style="display:none"></span>
       </button>
+      <button class="btn-icon" id="btn-open-anotacoes" title="Anotações de Estudo">📓</button>
       <!-- Banco de dados (só ADM) -->
       <div class="header-dropdown admin-only" id="db-wrapper">
         <button class="btn-icon" id="btn-db-menu" title="Banco de dados">🗄️</button>
@@ -132,6 +133,7 @@
       <button class="mobile-menu-item" id="m-btn-contatos">📇 Contatos</button>
       <button class="mobile-menu-item" id="m-btn-links">🔗 Links Úteis</button>
       <button class="mobile-menu-item" id="m-btn-programas">💿 Programas</button>
+      <button class="mobile-menu-item" id="m-btn-anotacoes">📓 Anotações de Estudo</button>
       <button class="mobile-menu-item mobile-item-amber" id="m-btn-reminders">
         🔔 Lembretes <span class="badge-count" id="m-reminder-badge" style="display:none"></span>
       </button>
@@ -503,6 +505,61 @@
   </div>
 </div>
 
+<!-- ═══════════ MODAL ANOTAÇÕES DE ESTUDO ═══════════ -->
+<div class="modal-overlay" id="modal-anotacoes" style="display:none">
+  <div class="modal modal-fullscreen">
+    <div class="modal-header">
+      <div>
+        <h2 class="modal-title">📓 Anotações de Estudo</h2>
+        <p class="modal-subtitle">Suas anotações privadas — texto formatado e imagens.</p>
+      </div>
+      <button class="modal-close" id="anot-modal-close">✕</button>
+    </div>
+    <div class="anot-layout">
+      <!-- Lista de anotações -->
+      <div class="anot-sidebar">
+        <button class="btn-primary anot-new-btn" id="anot-new">＋ Nova anotação</button>
+        <input type="text" id="anot-search" class="cham-search-input" placeholder="Buscar…" style="margin:10px 0" />
+        <div id="anot-list" class="anot-list"></div>
+      </div>
+      <!-- Editor -->
+      <div class="anot-editor-wrap">
+        <input type="hidden" id="anot-edit-id" />
+        <input type="text" id="anot-title" class="anot-title-input" placeholder="Título da anotação" />
+        <div class="editor-toolbar anot-toolbar">
+          <button type="button" class="toolbar-btn" data-anot-cmd="bold" title="Negrito"><b>B</b></button>
+          <button type="button" class="toolbar-btn" data-anot-cmd="italic" title="Itálico"><i>I</i></button>
+          <button type="button" class="toolbar-btn" data-anot-cmd="underline" title="Sublinhado"><u>U</u></button>
+          <button type="button" class="toolbar-btn" data-anot-cmd="strikeThrough" title="Riscado"><s>S</s></button>
+          <span class="toolbar-sep"></span>
+          <button type="button" class="toolbar-btn" data-anot-block="h1" title="Título">H1</button>
+          <button type="button" class="toolbar-btn" data-anot-block="h2" title="Subtítulo">H2</button>
+          <button type="button" class="toolbar-btn" data-anot-cmd="insertUnorderedList" title="Lista">☰</button>
+          <button type="button" class="toolbar-btn" data-anot-cmd="insertOrderedList" title="Lista numerada">⒈</button>
+          <span class="toolbar-sep"></span>
+          <button type="button" class="toolbar-btn" data-anot-block="blockquote" title="Citação">❝</button>
+          <button type="button" class="toolbar-btn" data-anot-block="pre" title="Código">&lt;/&gt;</button>
+          <button type="button" class="toolbar-btn" id="anot-link" title="Link">🔗</button>
+          <span class="toolbar-sep"></span>
+          <label class="toolbar-btn anot-color-label" title="Cor do texto">
+            🎨<input type="color" id="anot-color" class="anot-color-input" />
+          </label>
+          <button type="button" class="toolbar-btn" id="anot-insert-image" title="Inserir imagem">🖼</button>
+          <span class="toolbar-sep"></span>
+          <button type="button" class="toolbar-btn" data-anot-cmd="removeFormat" title="Limpar formatação">✖ formato</button>
+        </div>
+        <div id="anot-content" class="rich-editor anot-editor" contenteditable="true" data-placeholder="Comece a escrever suas anotações… Cole imagens com Ctrl+V."></div>
+        <div class="anot-actions">
+          <span class="anot-saved-hint" id="anot-saved-hint"></span>
+          <div style="flex:1"></div>
+          <button class="btn-delete anot-delete-btn" id="anot-delete" style="display:none">🗑 Excluir</button>
+          <button class="btn-primary" id="anot-save">💾 Salvar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ═══════════ MODAL CONTATOS ═══════════ -->
 <div class="modal-overlay" id="modal-contatos" style="display:none">
   <div class="modal modal-large">
@@ -640,6 +697,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
 <script src="firebase-config.js"></script>
-<script src="app.js?v=25"></script>
+<script src="app.js?v=28"></script>
 </body>
 </html>

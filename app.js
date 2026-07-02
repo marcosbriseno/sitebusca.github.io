@@ -5,7 +5,7 @@
 "use strict";
 
 /* ═══════════ ESTADO GLOBAL ═══════════ */
-let state = { textos: [], tutoriais: [], lembretes: [], contatos: [], links: [], programas: [], lembretesCompartilhados: [] };
+let state = { textos: [], tutoriais: [], lembretes: [], contatos: [], links: [], programas: [], lembretesCompartilhados: [], anotacoes: [] };
 let usage = {};   // { itemId: contagem }  — uso PRIVADO por usuário
 let history   = [];
 let favorites = {};
@@ -246,10 +246,11 @@ function attachPrivateListener(uid) {
       _lastPrivateJSON = incomingJSON;
       state.lembretes = data.lembretes || [];
       usage = data.usage || {};
+      state.anotacoes = data.anotacoes || [];
       markPrivateLoaded();
       refreshAllViews();
     } else {
-      const empty = { lembretes:[], usage:{}, updatedAt: Date.now() };
+      const empty = { lembretes:[], usage:{}, anotacoes:[], updatedAt: Date.now() };
       _lastPrivateJSON = JSON.stringify(empty);
       docRef.set(empty).then(markPrivateLoaded);
     }
@@ -279,7 +280,7 @@ function attachSharedRemListener() {
       refreshAllViews();
       scheduleAllAlarms();
     } else {
-      const empty = { lembretes:[], usage:{}, updatedAt: Date.now() };
+      const empty = { lembretes:[], usage:{}, anotacoes:[], updatedAt: Date.now() };
       _lastSharedRemJSON = JSON.stringify(empty);
       docRef.set(empty).catch(()=>{});
     }
@@ -364,7 +365,7 @@ function savePrivate() {
 function doSavePrivate() {
   if (!currentUser || !db) return;
   const payload = {
-    lembretes: state.lembretes, usage, updatedAt: Date.now()
+    lembretes: state.lembretes, usage, anotacoes: state.anotacoes, updatedAt: Date.now()
   };
   _lastPrivateJSON = JSON.stringify(payload);
   db.collection(PRIVATE_COLLECTION).doc(currentUser.uid).set(payload)
@@ -425,6 +426,7 @@ function bindEvents() {
     'm-btn-contatos':  '#btn-open-contatos',
     'm-btn-links':     '#btn-open-links',
     'm-btn-programas': '#btn-open-programas',
+    'm-btn-anotacoes': '#btn-open-anotacoes',
     'm-btn-reminders': '#btn-open-reminders',
     'm-btn-logout':    '#btn-logout',
   };
@@ -551,6 +553,56 @@ function bindEvents() {
   qs('#prog-save').addEventListener('click', savePrograma);
   qs('#prog-cancel').addEventListener('click', () => { resetProgForm(); hide(qs('#modal-programas')); });
   qs('#prog-search').addEventListener('input', renderProgramas);
+
+  /* ── ANOTAÇÕES DE ESTUDO ── */
+  qs('#btn-open-anotacoes').addEventListener('click', openAnotacoesModal);
+  qs('#anot-modal-close').addEventListener('click', () => hide(qs('#modal-anotacoes')));
+  qs('#modal-anotacoes').addEventListener('click', e => { if (e.target === qs('#modal-anotacoes')) hide(qs('#modal-anotacoes')); });
+  qs('#anot-new').addEventListener('click', newAnotacao);
+  qs('#anot-save').addEventListener('click', saveAnotacao);
+  qs('#anot-delete').addEventListener('click', deleteAnotacao);
+  qs('#anot-search').addEventListener('input', renderAnotList);
+
+  // toolbar: comandos simples
+  qsa('.toolbar-btn[data-anot-cmd]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.execCommand(btn.dataset.anotCmd, false, null);
+      qs('#anot-content').focus();
+    });
+  });
+  // toolbar: blocos (título, citação, código)
+  qsa('.toolbar-btn[data-anot-block]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.execCommand('formatBlock', false, btn.dataset.anotBlock);
+      qs('#anot-content').focus();
+    });
+  });
+  // cor do texto
+  qs('#anot-color').addEventListener('input', e => {
+    document.execCommand('foreColor', false, e.target.value);
+    qs('#anot-content').focus();
+  });
+  // link
+  qs('#anot-link').addEventListener('click', () => {
+    const url = prompt('Cole o endereço do link:');
+    if (url) document.execCommand('createLink', false, url);
+    qs('#anot-content').focus();
+  });
+  // inserir imagem (arquivo)
+  qs('#anot-insert-image').addEventListener('click', () => {
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = 'image/*';
+    inp.onchange = e => insertImageInto(e.target.files[0], '#anot-content');
+    inp.click();
+  });
+  // colar imagem com Ctrl+V
+  qs('#anot-content').addEventListener('paste', e => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.type.startsWith('image/')) { e.preventDefault(); insertImageInto(item.getAsFile(), '#anot-content'); break; }
+    }
+  });
 
   // editor rico do manual de programa
   qsa('.toolbar-btn[data-prog-cmd]').forEach(btn => {
@@ -2401,6 +2453,102 @@ function copyLinkToClipboard(link) {
   } else {
     fallbackCopy(link);
   }
+}
+
+/* ═══════════════════════════════════════════════
+   ANOTAÇÕES DE ESTUDO (privadas)
+   ═══════════════════════════════════════════════ */
+function openAnotacoesModal() {
+  renderAnotList();
+  // se não há nenhuma aberta, começa uma nova
+  if (!qs('#anot-edit-id').value) newAnotacao();
+  show(qs('#modal-anotacoes'));
+}
+
+function newAnotacao() {
+  qs('#anot-edit-id').value = '';
+  qs('#anot-title').value = '';
+  qs('#anot-content').innerHTML = '';
+  qs('#anot-delete').style.display = 'none';
+  qs('#anot-saved-hint').textContent = '';
+  qsa('#anot-list .anot-item').forEach(el => el.classList.remove('active'));
+  qs('#anot-title').focus();
+}
+
+function saveAnotacao() {
+  const title = qs('#anot-title').value.trim();
+  const content = qs('#anot-content').innerHTML;
+  if (!title && !content.trim()) { toast('Escreva algo antes de salvar.','warn'); return; }
+
+  const editId = qs('#anot-edit-id').value;
+  if (editId) {
+    const idx = state.anotacoes.findIndex(a => a.id === editId);
+    if (idx > -1) state.anotacoes[idx] = { ...state.anotacoes[idx], title: title||'Sem título', content, updatedAt: Date.now() };
+  } else {
+    const novo = { id: uid(), title: title||'Sem título', content, createdAt: Date.now(), updatedAt: Date.now() };
+    state.anotacoes.push(novo);
+    qs('#anot-edit-id').value = novo.id;
+    qs('#anot-delete').style.display = 'inline-flex';
+  }
+  savePrivate();
+  renderAnotList();
+  qs('#anot-saved-hint').textContent = '✓ Salvo';
+  setTimeout(() => { const h=qs('#anot-saved-hint'); if(h) h.textContent=''; }, 2000);
+  toast('💾 Anotação salva!','success');
+}
+
+function openAnotacao(id) {
+  const a = state.anotacoes.find(x => x.id === id);
+  if (!a) return;
+  qs('#anot-edit-id').value = a.id;
+  qs('#anot-title').value = a.title || '';
+  qs('#anot-content').innerHTML = a.content || '';
+  qs('#anot-delete').style.display = 'inline-flex';
+  qs('#anot-saved-hint').textContent = '';
+  qsa('#anot-list .anot-item').forEach(el => el.classList.toggle('active', el.dataset.id === id));
+}
+
+function deleteAnotacao() {
+  const id = qs('#anot-edit-id').value;
+  if (!id) return;
+  if (!confirm('Excluir esta anotação?')) return;
+  state.anotacoes = state.anotacoes.filter(a => a.id !== id);
+  savePrivate();
+  renderAnotList();
+  newAnotacao();
+  toast('🗑 Anotação excluída','info');
+}
+
+function renderAnotList() {
+  const list = qs('#anot-list');
+  if (!list) return;
+  const query = (qs('#anot-search').value || '').trim().toLowerCase();
+  let items = [...state.anotacoes].sort((a,b) => (b.updatedAt||0) - (a.updatedAt||0));
+  if (query) items = items.filter(a => (a.title||'').toLowerCase().includes(query) || stripHtml(a.content||'').toLowerCase().includes(query));
+
+  if (!items.length) {
+    list.innerHTML = '<div class="empty-state" style="padding:16px;font-size:13px">Nenhuma anotação. Clique em "Nova anotação" para começar.</div>';
+    return;
+  }
+  const activeId = qs('#anot-edit-id').value;
+  list.innerHTML = items.map(a => {
+    const preview = truncate(stripHtml(a.content||''), 50);
+    const d = new Date(a.updatedAt||a.createdAt||Date.now());
+    return `<div class="anot-item ${a.id===activeId?'active':''}" data-id="${a.id}">
+      <div class="anot-item-title">${escHtml(a.title||'Sem título')}</div>
+      <div class="anot-item-preview">${escHtml(preview)||'(vazia)'}</div>
+      <div class="anot-item-date">${fmtDate(d)}</div>
+    </div>`;
+  }).join('');
+  qsa('#anot-list .anot-item').forEach(el =>
+    el.addEventListener('click', () => openAnotacao(el.dataset.id)));
+}
+
+// remove tags HTML para gerar preview em texto puro
+function stripHtml(html) {
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  return (tmp.textContent || tmp.innerText || '').replace(/\s+/g,' ').trim();
 }
 
 /* ═══════════════════════════════════════════════

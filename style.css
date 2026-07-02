@@ -1217,3 +1217,76 @@ mark { background: rgba(189,147,249,0.28); color: var(--cyan); border-radius: 2p
 @media (max-width: 700px) {
   .pwa-install-btn { bottom: 16px; right: 16px; padding: 10px 16px; font-size: 13px; }
 }
+
+/* ═══════════════════════════════════════════════
+   ANOTAÇÕES DE ESTUDO
+   ═══════════════════════════════════════════════ */
+.anot-layout {
+  display: grid; grid-template-columns: 260px 1fr;
+  gap: 0; height: 70vh; min-height: 400px;
+}
+.anot-sidebar {
+  border-right: 1px solid var(--border);
+  padding: 16px; display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.anot-new-btn { width: 100%; }
+.anot-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.anot-item {
+  padding: 10px 12px; border-radius: var(--radius-sm);
+  background: var(--bg-base); border: 1px solid var(--border);
+  cursor: pointer; transition: all var(--transition);
+}
+.anot-item:hover { border-color: var(--cyan); }
+.anot-item.active { border-color: var(--cyan); background: var(--bg-hover); }
+.anot-item-title { font-size: 13px; font-weight: 600; color: var(--text-primary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.anot-item-preview { font-size: 11.5px; color: var(--text-secondary); margin-top: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.anot-item-date { font-size: 10px; color: var(--text-muted); font-family: var(--font-mono); margin-top: 4px; }
+
+.anot-editor-wrap {
+  display: flex; flex-direction: column; padding: 16px; overflow: hidden;
+}
+.anot-title-input {
+  width: 100%; background: transparent; border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary); font-family: var(--font-ui);
+  font-size: 20px; font-weight: 700; padding: 6px 2px 10px; margin-bottom: 12px;
+  outline: none;
+}
+.anot-title-input:focus { border-bottom-color: var(--cyan); }
+.anot-toolbar { flex-wrap: wrap; }
+.anot-editor {
+  flex: 1; overflow-y: auto; min-height: 200px;
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  margin-top: 10px;
+}
+.anot-editor h1 { font-size: 22px; margin: 12px 0 6px; }
+.anot-editor h2 { font-size: 18px; margin: 10px 0 6px; }
+.anot-editor blockquote {
+  border-left: 3px solid var(--cyan); margin: 8px 0; padding: 4px 12px;
+  color: var(--text-secondary); background: var(--bg-base);
+}
+.anot-editor pre {
+  background: var(--bg-base); border: 1px solid var(--border);
+  border-radius: 6px; padding: 10px; font-family: var(--font-mono);
+  font-size: 13px; overflow-x: auto; margin: 8px 0;
+}
+.anot-editor a { color: var(--cyan); }
+.anot-color-label { position: relative; overflow: hidden; }
+.anot-color-input {
+  position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+}
+.anot-actions { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.anot-saved-hint { font-size: 12px; color: var(--green); font-weight: 500; }
+.anot-delete-btn { background: transparent; border: 1px solid var(--red); color: var(--red);
+  padding: 8px 14px; border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; }
+.anot-delete-btn:hover { background: rgba(255,85,85,0.12); }
+
+/* Responsivo: no mobile, lista vira topo e editor embaixo */
+@media (max-width: 700px) {
+  .anot-layout { grid-template-columns: 1fr; height: auto; }
+  .anot-sidebar { border-right: none; border-bottom: 1px solid var(--border); max-height: 180px; }
+  .anot-editor { min-height: 300px; }
+}

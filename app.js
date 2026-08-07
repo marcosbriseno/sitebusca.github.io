@@ -1230,6 +1230,28 @@ function nowBrasilia() {
 }
 function addDays(d,n) { const r=new Date(d); r.setDate(r.getDate()+n); return r; }
 function nextBusinessDay(d) { let next=addDays(d,1); while(next.getDay()===0||next.getDay()===6) next=addDays(next,1); return next; }
+// Soma N dias ÚTEIS (pula sábados e domingos)
+function addBusinessDays(d, n) {
+  let r = new Date(d), added = 0;
+  while (added < n) { r = addDays(r, 1); if (r.getDay() !== 0 && r.getDay() !== 6) added++; }
+  return r;
+}
+// Resolve um placeholder dinâmico de data. Retorna string ou null se não for um.
+// Sintaxes aceitas (base pode ser "hoje" ou "amanha"):
+//   {hoje+7}   -> 7 dias corridos depois
+//   {hoje+7u}  -> 7 dias úteis depois (u = úteis)
+//   {hoje-3}   -> 3 dias corridos antes
+function resolveDynamicDate(name, baseDate) {
+  const m = name.trim().toLowerCase().match(/^(hoje|amanha)\s*([+-])\s*(\d+)\s*(u|uteis|útil|úteis)?$/);
+  if (!m) return null;
+  let base = new Date(baseDate);
+  if (m[1] === 'amanha') base = addDays(base, 1);
+  const sign = m[2] === '-' ? -1 : 1;
+  const num = parseInt(m[3], 10) * sign;
+  const uteis = !!m[4];
+  const result = uteis ? addBusinessDays(base, num) : addDays(base, num);
+  return fmtDate(result);
+}
 function fmtDate(d) { return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`; }
 function fmtTime(d) { return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; }
 function fmtFull(d) {
@@ -1242,10 +1264,12 @@ function resolveAutoPlaceholders(text) {
   return text.replace(/\{([^}]+)\}/g,(match,name)=>{
     const key=name.trim().toLowerCase();
     if (AUTO_PLACEHOLDERS[key]) return AUTO_PLACEHOLDERS[key](now);
+    const dyn = resolveDynamicDate(name, now);
+    if (dyn !== null) return dyn;
     return match;
   });
 }
-function isAutoPlaceholder(name) { return !!AUTO_PLACEHOLDERS[name.trim().toLowerCase()]; }
+function isAutoPlaceholder(name) { return !!AUTO_PLACEHOLDERS[name.trim().toLowerCase()] || resolveDynamicDate(name, nowBrasilia()) !== null; }
 function extractManualPlaceholders(text) {
   const matches=[...text.matchAll(/\{([^}]+)\}/g)];
   return [...new Set(matches.map(m=>m[1]))].filter(ph=>!isAutoPlaceholder(ph));
@@ -1262,12 +1286,21 @@ function getAutoMeta(name) {
     hora:             {label:'Hora atual (Brasília)', icon:'🕐', value:fmtTime(now)},
     datahoracompleta: {label:'Data e hora completa',  icon:'🗓', value:fmtFull(now)},
   };
-  return map[key]||null;
+  if (map[key]) return map[key];
+  // placeholder dinâmico de data
+  const dyn = resolveDynamicDate(name, now);
+  if (dyn !== null) {
+    const isUteis = /u|úteis|uteis|útil/i.test(name);
+    return { label: isUteis ? 'Data (dias úteis)' : 'Data (dias corridos)', icon:'📅', value: dyn };
+  }
+  return null;
 }
 function buildPreview(text, manualValues) {
   const now=nowBrasilia();
   return text.replace(/\{([^}]+)\}/g,(match,name)=>{
     const key=name.trim().toLowerCase();
+    const dyn=resolveDynamicDate(name, now);
+    if (!AUTO_PLACEHOLDERS[key] && dyn!==null) return `<span class="ph-auto">${dyn}</span>`;
     if (AUTO_PLACEHOLDERS[key]) return `<span class="ph-auto" title="Automático">${escHtml(AUTO_PLACEHOLDERS[key](now))}</span>`;
     const val=(manualValues[name]||'').trim();
     if (val) return `<span class="ph-filled">${escHtml(val)}</span>`;

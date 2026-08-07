@@ -916,12 +916,15 @@ function handleCardClick(id, kind) {
     openTutorialView(item);
   } else if (kind === 'contato') {
     const item = state.contatos.find(t => t.id===id); if (!item) return;
+    incrementUse(id,'contato');
     openContatoView(item);
   } else if (kind === 'link') {
     const item = state.links.find(t => t.id===id); if (!item) return;
+    incrementUse(id,'link');
     if (item.url) window.open(item.url, '_blank', 'noopener');
   } else if (kind === 'programa') {
     const item = state.programas.find(t => t.id===id); if (!item) return;
+    incrementUse(id,'programa');
     openProgManual(item);
   }
 }
@@ -1236,11 +1239,7 @@ function addBusinessDays(d, n) {
   while (added < n) { r = addDays(r, 1); if (r.getDay() !== 0 && r.getDay() !== 6) added++; }
   return r;
 }
-// Resolve um placeholder dinâmico de data. Retorna string ou null se não for um.
-// Sintaxes aceitas (base pode ser "hoje" ou "amanha"):
-//   {hoje+7}   -> 7 dias corridos depois
-//   {hoje+7u}  -> 7 dias úteis depois (u = úteis)
-//   {hoje-3}   -> 3 dias corridos antes
+// Resolve placeholder dinâmico de data: {hoje+7}, {hoje+7u}, {hoje-3}, {amanha+2}
 function resolveDynamicDate(name, baseDate) {
   const m = name.trim().toLowerCase().match(/^(hoje|amanha)\s*([+-])\s*(\d+)\s*(u|uteis|útil|úteis)?$/);
   if (!m) return null;
@@ -1287,7 +1286,6 @@ function getAutoMeta(name) {
     datahoracompleta: {label:'Data e hora completa',  icon:'🗓', value:fmtFull(now)},
   };
   if (map[key]) return map[key];
-  // placeholder dinâmico de data
   const dyn = resolveDynamicDate(name, now);
   if (dyn !== null) {
     const isUteis = /u|úteis|uteis|útil/i.test(name);

@@ -398,6 +398,20 @@ function bindEvents() {
   /* ── LOGOUT ── */
   qs('#btn-logout').addEventListener('click', doLogout);
 
+  /* ── CLICAR NA MARCA: volta ao início e limpa a busca ── */
+  qs('#header-brand')?.addEventListener('click', () => {
+    qs('#search-input').value = '';
+    const sim = qs('#search-input-mobile'); if (sim) sim.value = '';
+    qs('#search-clear')?.classList.remove('visible');
+    activeCategory = null;
+    hide(qs('#results-section'));
+    show(qs('#panel-most-used'));
+    renderMostUsed();
+    // fecha o menu mobile se estiver aberto
+    closeMobileMenu();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+
   /* ── DROPDOWN CADASTRAR (header) ── */
   qs('#btn-cadastrar-menu').addEventListener('click', e => {
     e.stopPropagation();

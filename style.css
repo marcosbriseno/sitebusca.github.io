@@ -216,8 +216,11 @@ body {
 .header-brand {
   display: flex; align-items: center; gap: 8px;
   font-family: var(--font-mono); font-weight: 500; font-size: 16px;
-  color: var(--cyan);
+  color: var(--cyan); cursor: pointer;
+  transition: opacity var(--transition);
+  user-select: none;
 }
+.header-brand:hover { opacity: 0.75; }
 .brand-icon { font-size: 18px; }
 .brand-name { color: var(--text-primary); }
 .header-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
